@@ -64,6 +64,16 @@ except Exception as e:
         f"🚨 Excel dosyası okunamadı! Lütfen projenizde geçerli bir Excel dosyası ve içinde detay sayfası bulunduğundan emin olun. Hata: {str(e)}")
     df_detay = pd.DataFrame()
 
+# ── GLOBAL UNVAN TANIMLARI (HATA ÖNLEYİCİ) ────────
+unvan_secenekleri = {
+    "Tümü (Toplam)": ([], []),
+    "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "mmy"]),
+    "Mağaza Müdür Yardımcısı": (["yardım", "yrd", "mmy"], []),
+    "VM": (["vm", "görsel", "visual"], []),
+    "Sorumlu Ekip": (["sorumlu"], []),
+    "Satış Ekibi": (["satış", "satiş", "danışman"], [])
+}
+
 
 def bul_kolon(columns, anahtar_kelimeler, haric_tutulacaklar=None):
     """
@@ -612,7 +622,7 @@ with sekme3:
             pt_tum_col = None
             pt_gonullu_col = None
 
-            # 1. Aşama: Net Kelime Araması (Hatasız eşleşme için arada '-' işareti olmayan "Full Time" / "Part-Time" aranır)
+            # 1. Aşama: Net Kelime Araması (Tire olmadan tam olarak "Full Time" / "Part-Time" aranır)
             for col in df_detay.columns:
                 col_str = str(col).strip().lower()
                 if "sayısı" in col_str or "sayisi" in col_str:
