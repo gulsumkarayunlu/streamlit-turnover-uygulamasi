@@ -271,7 +271,7 @@ with st.sidebar:
     st.markdown("**Karne Verisi - Turnover**")
     st.divider()
 
-    # YENİ: Tüm Filtreleri Temizle Butonu (En Üstte)
+    # Tüm Filtreleri Temizle Butonu (En Üstte)
     if st.button("🔄 Tüm Filtreleri Temizle", use_container_width=True):
         st.session_state.ay_key = "Tümü (Nisan & Mayıs)"
         st.session_state.pm_key = "Tümü"
@@ -298,9 +298,8 @@ with st.sidebar:
         df_temp_pm = df.copy()
 
     bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
-    bm_idx = bm_listesi.index(st.session_state.bm_key) if st.session_state.bm_key in bm_listesi else 0
-    st.markdown("👤 **Bölge Müdürü (BM)**")
-    sec_bm = st.selectbox("BM", bm_listesi, index=bm_idx, key="bm_select", label_visibility="collapsed")
+    st.markdown("👤 **Bölge Müdürlüğü (BM)**")
+    sec_bm = st.selectbox("BM", bm_listesi, index=pm_idx, key="bm_select", label_visibility="collapsed")
     st.session_state.bm_key = sec_bm
 
     if sec_bm != "Tümü":
@@ -309,19 +308,13 @@ with st.sidebar:
         df_temp_bm = df_temp_pm.copy()
 
     hrbp_listesi = ["Tümü"] + sorted(df_temp_bm["HRBP"].dropna().unique().tolist())
-    hrbp_idx = hrbp_listesi.index(st.session_state.hrbp_key) if st.session_state.hrbp_key in hrbp_listesi else 0
     st.markdown("🤝 **İK İş Ortağı (HRBP)**")
-    sec_hrbp = st.selectbox("HRBP", hrbp_listesi, index=hrbp_idx, key="hrbp_select", label_visibility="collapsed")
-    st.session_state.hrbp_key = sec_hrbp
+    sec_hrbp = st.selectbox("HRBP", hrbp_listesi, label_visibility="collapsed")
 
     segment_sirasi = ["FS", "A++", "A+", "A", "B", "C", "D"]
     segment_listesi = ["Tümü"] + [s for s in segment_sirasi if s in df["Segment"].dropna().unique().tolist()]
-    segment_idx = segment_listesi.index(
-        st.session_state.segment_key) if st.session_state.segment_key in segment_listesi else 0
     st.markdown("🏷️ **Segment**")
-    sec_segment = st.selectbox("Segment", segment_listesi, index=segment_idx, key="segment_select",
-                               label_visibility="collapsed")
-    st.session_state.segment_key = sec_segment
+    sec_segment = st.selectbox("Segment", segment_listesi, label_visibility="collapsed")
 
 # ── FİLTRELEME ────────────────────────────────
 df_f = df.copy()
@@ -386,10 +379,11 @@ with col_baslik:
 st.divider()
 
 # ── SEKMELER ──────────────────────────────────
+# GÜNCELLEME: Mayıs Detay Analizi 2. sekme, Mağaza Detay Analiz Kartı ise 3. sekme yapıldı.
 sekme1, sekme2, sekme3 = st.tabs([
     "📊 Genel Performans & Trendler",
-    "🏪 Mağaza Detay Analiz Kartı",
-    "📅 Mayıs Detay Analizi"
+    "📅 Mayıs Detay Analizi",
+    "🏪 Mağaza Detay Analiz Kartı"
 ])
 
 # ── SEKME 1 ───────────────────────────────────
@@ -483,169 +477,8 @@ with sekme1:
     st.dataframe(goster, use_container_width=True, hide_index=True)
 
 # ── SEKME 2 ───────────────────────────────────
+# GÜNCELLEME: Bu sekme artık "Mayıs Detay Analizi" sayfasını gösteriyor.
 with sekme2:
-    st.markdown("### Detaylı Mağaza Karnesi")
-    st.markdown("Aşağıdaki filtrelerden seçim yapabilirsiniz.")
-
-    # GÜNCELLEME: İl filtresi Mağaza filtresinin soluna (önüne) taşındı
-    col_il, col_mag = st.columns([1, 3])
-
-    with col_il:
-        st.markdown("📍 **İl Filtresi**")
-        il_listesi = ["Tümü"] + sorted(df_f["Il"].dropna().unique().tolist())
-        sec_il = st.selectbox("İl", il_listesi, label_visibility="collapsed")
-
-    df_magaza = df_f.copy()
-    if sec_il != "Tümü":
-        df_magaza = df_magaza[df_magaza["Il"] == sec_il]
-
-    with col_mag:
-        st.markdown("🔍 **İncelenecek Mağazayı Seçin**")
-        magaza_listesi = list(df_magaza["Masraf_Kodu"] + " — " + df_magaza["Magaza"])
-        if not magaza_listesi:
-            st.warning("Seçili filtreye uygun mağaza bulunamadı.")
-            st.stop()
-        sec_magaza = st.selectbox("Mağaza", magaza_listesi, label_visibility="collapsed")
-
-    if sec_magaza:
-        kod = sec_magaza.split(" — ")[0].strip()
-        s = df[df["Masraf_Kodu"] == kod].iloc[0]
-
-        st.markdown(f"""
-        <div class="magaza-kart">
-            <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">MAĞAZA BİLGİLERİ</p>
-            <h2 style="color:white; margin:0;">{s['Masraf_Kodu']} — {s['Magaza']}</h2>
-            <br>
-            <span style="color:#e0e0e0; margin-right:24px;">📍 İl: <b>{s['Il']}</b></span>
-            <span style="color:#e0e0e0; margin-right:24px;">➕️ Segment: <b>{s['Segment']}</b></span>
-            <br><br>
-            <span style="color:#e0e0e0; margin-right:24px;">👤 BM: <b>{s['BM']}</b></span>
-            <span style="color:#e0e0e0; margin-right:24px;">🏪 PM: <b>{s['PM']}</b></span>
-            <span style="color:#e0e0e0;">🤝 HRBP: <b>{s['HRBP']}</b></span>
-        </div>
-        """, unsafe_allow_html=True)
-
-        col_sol, col_sag = st.columns([1, 1])
-
-        with col_sol:
-            if sec_ay == "Tümü (Nisan & Mayıs)":
-                st.markdown("#### 🚀 2026 Turnover Seviyeleri")
-                k1, k2, k3 = st.columns(3)
-                for kart, ay, to_val in zip([k1, k2, k3],
-                                            ["Nisan 2026", "Mayıs 2026", "YTD 2026"],
-                                            [s["Nis26_TO"], s["Mayis26_TO"], s["YTD26_TO"]]):
-                    with kart:
-                        etiket, emoji = risk_etiketi(to_val)
-                        st.metric(ay, f"%{to_val:.1f}" if not pd.isna(to_val) else "—")
-                        st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
-                                    unsafe_allow_html=True)
-
-                st.markdown("#### 🌐 2025 Turnover Seviyeleri")
-                k4, k5, k6 = st.columns(3)
-                for kart, ay, to_val in zip([k4, k5, k6],
-                                            ["Nisan 2025", "Mayıs 2025", "YTD 2025"],
-                                            [s["Nis25_TO"], s["Mayis25_TO"], s["YTD25_TO"]]):
-                    with kart:
-                        etiket, emoji = risk_etiketi(to_val)
-                        st.metric(ay, f"%{to_val:.1f}" if not pd.isna(to_val) else "—")
-                        st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
-                                    unsafe_allow_html=True)
-            else:
-                st.markdown(f"#### 🚀 {sec_ay} 2026 Turnover")
-                k1, k2 = st.columns(2)
-                to26_val = s[to26_col]
-                to25_val = s[to25_col]
-                ytd_val = s["YTD26_TO"]
-                with k1:
-                    etiket, emoji = risk_etiketi(to26_val)
-                    st.metric(f"{sec_ay} 2026", f"%{to26_val:.1f}" if not pd.isna(to26_val) else "—")
-                    st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
-                                unsafe_allow_html=True)
-                with k2:
-                    etiket, emoji = risk_etiketi(to25_val)
-                    st.metric(f"{sec_ay} 2025", f"%{to25_val:.1f}" if not pd.isna(to25_val) else "—")
-                    st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
-                                unsafe_allow_html=True)
-
-                st.markdown("#### 📊 YTD 2026")
-                etiket, emoji = risk_etiketi(ytd_val)
-                st.metric("YTD 2026", f"%{ytd_val:.1f}" if not pd.isna(ytd_val) else "—")
-                st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>", unsafe_allow_html=True)
-
-        with col_sag:
-            st.markdown("#### 📈 Yıllık Karşılaştırma Grafiği")
-            aylar = ["Oca", "Şub", "Mar", "Nis", "May"]
-            vals26 = [s["Oca26_TO"], s["Sub26_TO"], s["Mar26_TO"], s["Nis26_TO"], s["Mayis26_TO"]]
-            vals25 = [s["Oca25_TO"], s["Sub25_TO"], s["Mar25_TO"], s["Nis25_TO"], s["Mayis25_TO"]]
-
-            fig = go.Figure()
-            fig.add_trace(go.Bar(name="2025", x=aylar, y=vals25, marker_color="#e05c5c", opacity=0.8))
-            fig.add_trace(go.Bar(name="2026", x=aylar, y=vals26, marker_color="#4a6fa5", opacity=0.9))
-            fig.update_layout(
-                paper_bgcolor="#1a2f5e", plot_bgcolor="#1a2f5e",
-                font=dict(color="white"), legend=dict(font=dict(color="white")),
-                barmode="group", margin=dict(l=20, r=20, t=20, b=20), height=300
-            )
-            st.plotly_chart(fig, use_container_width=True)
-
-        st.divider()
-        st.markdown(f"#### 🏷️ Segment Karşılaştırması — {s['Segment']}")
-        st.markdown(
-            f"<p style='color:#aaaacc;'>Bu mağazanın aynı segmentteki ({s['Segment']}) diğer mağazalarla karşılaştırması</p>",
-            unsafe_allow_html=True)
-
-        df_seg = df[df["Segment"] == s["Segment"]]
-        seg_nis26 = genel_to(df_seg, "Nis26_Cikis", "Nis26_Ort")
-        seg_may26 = genel_to(df_seg, "Mayis26_Cikis", "Mayis26_Ort")
-        seg_ytd26 = genel_to(df_seg, "YTD26_Cikis", "YTD26_Ort")
-        seg_nis25 = genel_to(df_seg, "Nis25_Cikis", "Nis25_Ort")
-        seg_may25 = genel_to(df_seg, "Mayis25_Cikis", "Mayis25_Ort")
-        seg_ytd25 = genel_to(df_seg, "YTD25_Cikis", "YTD25_Ort")
-
-        st.markdown(f"""
-        <div class="segment-kart">
-            <p style="color:#85B7EB; font-weight:bold; margin-bottom:12px;">Segment Ortalaması ({s['Segment']}) — {len(df_seg)} Mağaza</p>
-        </div>
-        """, unsafe_allow_html=True)
-
-        sc1, sc2, sc3 = st.columns(3)
-        karsilastirmalar = [
-            ("📅 Nisan 2026", s["Nis26_TO"], seg_nis26),
-            ("📆 Mayıs 2026", s["Mayis26_TO"], seg_may26),
-            ("📊 YTD 2026", s["YTD26_TO"], seg_ytd26),
-        ]
-        for kart, (baslik, magaza_val, seg_val) in zip([sc1, sc2, sc3], karsilastirmalar):
-            with kart:
-                mag_str = f"%{magaza_val:.1f}" if not pd.isna(magaza_val) else "—"
-                seg_str = f"%{seg_val:.1f}"
-                delta = round(magaza_val - seg_val, 1) if not pd.isna(magaza_val) else 0
-                st.metric(
-                    label=baslik,
-                    value=mag_str,
-                    delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
-                    delta_color="inverse"
-                )
-
-        sc4, sc5, sc6 = st.columns(3)
-        karsilastirmalar25 = [
-            ("📅 Nisan 2025", s["Nis25_TO"], seg_nis25),
-            ("📆 Mayıs 2025", s["Mayis25_TO"], seg_may25),
-            ("📊 YTD 2025", s["YTD25_TO"], seg_ytd25),
-        ]
-        for kart, (baslik, magaza_val, seg_val) in zip([sc4, sc5, sc6], karsilastirmalar25):
-            with kart:
-                mag_str = f"%{magaza_val:.1f}" if not pd.isna(magaza_val) else "—"
-                seg_str = f"%{seg_val:.1f}"
-                delta = round(magaza_val - seg_val, 1) if not pd.isna(magaza_val) else 0
-                st.metric(
-                    label=baslik,
-                    value=mag_str,
-                    delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
-                    delta_color="inverse"
-                )
-
-# ── SEKME 3 ───────────────────────────────────
-with sekme3:
     st.markdown("### 📅 Mayıs Detay Veri Analizi")
     st.markdown(
         "Mağaza ve unvan seçimi yaparak Nisan Dönem İçi hareketlerini ve turnover oranlarını dinamik olarak inceleyebilirsiniz.")
@@ -664,7 +497,7 @@ with sekme3:
                 # Seçilen mağazanın satırını çekiyoruz
                 s_detay = df_detay[df_detay[magaza_col_detay].astype(str) == sec_magaza_detay].iloc[0]
 
-                # 2. Üst Merged Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
+                # 2. Üst Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
                 ft_tum_col = None
                 ft_gonullu_col = None
                 pt_tum_col = None
@@ -701,6 +534,7 @@ with sekme3:
                          "cikis"])]
 
                     if len(tum_all) >= 2:
+                        # Kullanıcının uyarısı üzerine Full Time ve Part-Time yerleşim eşleşmesini ters çevirerek (swap) düzelttik
                         ft_tum_col = tum_all[1]
                         pt_tum_col = tum_all[0]
                     if len(gonullu_all) >= 2:
@@ -973,3 +807,166 @@ with sekme3:
                     "Lütfen Excel tablonuzdaki başlıkların ve seçilen mağazanın verilerinin tam olduğunu kontrol edin.")
                 with st.expander("🛠️ Teknik Hata Detayı (Traceback)"):
                     st.text(traceback.format_exc())
+
+# ── SEKME 3 ───────────────────────────────────
+# GÜNCELLEME: Bu sekme artık "Mağaza Detay Analiz Kartı" sayfasını gösteriyor.
+with sekme3:
+    st.markdown("### Detaylı Mağaza Karnesi")
+    st.markdown("Aşağıdaki filtrelerden seçim yapabilirsiniz.")
+
+    # GÜNCELLEME: İl filtresi Mağaza filtresinin soluna (önüne) taşındı
+    col_il, col_mag = st.columns([1, 3])
+
+    with col_il:
+        st.markdown("📍 **İl Filtresi**")
+        il_listesi = ["Tümü"] + sorted(df_f["Il"].dropna().unique().tolist())
+        sec_il = st.selectbox("İl", il_listesi, key="il_detay_card", label_visibility="collapsed")
+
+    df_magaza = df_f.copy()
+    if sec_il != "Tümü":
+        df_magaza = df_magaza[df_magaza["Il"] == sec_il]
+
+    with col_mag:
+        st.markdown("🔍 **İncelenecek Mağazayı Seçin**")
+        magaza_listesi = list(df_magaza["Masraf_Kodu"] + " — " + df_magaza["Magaza"])
+        if not magaza_listesi:
+            st.warning("Seçili filtreye uygun mağaza bulunamadı.")
+            st.stop()
+        sec_magaza = st.selectbox("Mağaza", magaza_listesi, key="magaza_detay_card", label_visibility="collapsed")
+
+    if sec_magaza:
+        kod = sec_magaza.split(" — ")[0].strip()
+        s = df[df["Masraf_Kodu"] == kod].iloc[0]
+
+        st.markdown(f"""
+        <div class="magaza-kart">
+            <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">MAĞAZA BİLGİLERİ</p>
+            <h2 style="color:white; margin:0;">{s['Masraf_Kodu']} — {s['Magaza']}</h2>
+            <br>
+            <span style="color:#e0e0e0; margin-right:24px;">📍 İl: <b>{s['Il']}</b></span>
+            <span style="color:#e0e0e0; margin-right:24px;">➕️ Segment: <b>{s['Segment']}</b></span>
+            <br><br>
+            <span style="color:#e0e0e0; margin-right:24px;">👤 BM: <b>{s['BM']}</b></span>
+            <span style="color:#e0e0e0; margin-right:24px;">🏪 PM: <b>{s['PM']}</b></span>
+            <span style="color:#e0e0e0;">🤝 HRBP: <b>{s['HRBP']}</b></span>
+        </div>
+        """, unsafe_allow_html=True)
+
+        col_sol, col_sag = st.columns([1, 1])
+
+        with col_sol:
+            if sec_ay == "Tümü (Nisan & Mayıs)":
+                st.markdown("#### 🚀 2026 Turnover Seviyeleri")
+                k1, k2, k3 = st.columns(3)
+                for kart, ay, to_val in zip([k1, k2, k3],
+                                            ["Nisan 2026", "Mayıs 2026", "YTD 2026"],
+                                            [s["Nis26_TO"], s["Mayis26_TO"], s["YTD26_TO"]]):
+                    with kart:
+                        etiket, emoji = risk_etiketi(to_val)
+                        st.metric(ay, f"%{to_val:.1f}" if not pd.isna(to_val) else "—")
+                        st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
+                                    unsafe_allow_html=True)
+
+                st.markdown("#### 🌐 2025 Turnover Seviyeleri")
+                k4, k5, k6 = st.columns(3)
+                for kart, ay, to_val in zip([k4, k5, k6],
+                                            ["Nisan 2025", "Mayıs 2025", "YTD 2025"],
+                                            [s["Nis25_TO"], s["Mayis25_TO"], s["YTD25_TO"]]):
+                    with kart:
+                        etiket, emoji = risk_etiketi(to_val)
+                        st.metric(ay, f"%{to_val:.1f}" if not pd.isna(to_val) else "—")
+                        st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
+                                    unsafe_allow_html=True)
+            else:
+                st.markdown(f"#### 🚀 {sec_ay} 2026 Turnover")
+                k1, k2 = st.columns(2)
+                to26_val = s[to26_col]
+                to25_val = s[to25_col]
+                ytd_val = s["YTD26_TO"]
+                with k1:
+                    etiket, emoji = risk_etiketi(to26_val)
+                    st.metric(f"{sec_ay} 2026", f"%{to26_val:.1f}" if not pd.isna(to26_val) else "—")
+                    st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
+                                unsafe_allow_html=True)
+                with k2:
+                    etiket, emoji = risk_etiketi(to25_val)
+                    st.metric(f"{sec_ay} 2025", f"%{to25_val:.1f}" if not pd.isna(to25_val) else "—")
+                    st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>",
+                                unsafe_allow_html=True)
+
+                st.markdown("#### 📊 YTD 2026")
+                etiket, emoji = risk_etiketi(ytd_val)
+                st.metric("YTD 2026", f"%{ytd_val:.1f}" if not pd.isna(ytd_val) else "—")
+                st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>", unsafe_allow_html=True)
+
+        with col_sag:
+            st.markdown("#### 📈 Yıllık Karşılaştırma Grafiği")
+            aylar = ["Oca", "Şub", "Mar", "Nis", "May"]
+            vals26 = [s["Oca26_TO"], s["Sub26_TO"], s["Mar26_TO"], s["Nis26_TO"], s["Mayis26_TO"]]
+            vals25 = [s["Oca25_TO"], s["Sub25_TO"], s["Mar25_TO"], s["Nis25_TO"], s["Mayis25_TO"]]
+
+            fig = go.Figure()
+            fig.add_trace(go.Bar(name="2025", x=aylar, y=vals25, marker_color="#e05c5c", opacity=0.8))
+            fig.add_trace(go.Bar(name="2026", x=aylar, y=vals26, marker_color="#4a6fa5", opacity=0.9))
+            fig.update_layout(
+                paper_bgcolor="#1a2f5e", plot_bgcolor="#1a2f5e",
+                font=dict(color="white"), legend=dict(font=dict(color="white")),
+                barmode="group", margin=dict(l=20, r=20, t=20, b=20), height=300
+            )
+            st.plotly_chart(fig, use_container_width=True)
+
+        st.divider()
+        st.markdown(f"#### 🏷️ Segment Karşılaştırması — {s['Segment']}")
+        st.markdown(
+            f"<p style='color:#aaaacc;'>Bu mağazanın aynı segmentteki ({s['Segment']}) diğer mağazalarla karşılaştırması</p>",
+            unsafe_allow_html=True)
+
+        df_seg = df[df["Segment"] == s["Segment"]]
+        seg_nis26 = genel_to(df_seg, "Nis26_Cikis", "Nis26_Ort")
+        seg_may26 = genel_to(df_seg, "Mayis26_Cikis", "Mayis26_Ort")
+        seg_ytd26 = genel_to(df_seg, "YTD26_Cikis", "YTD26_Ort")
+        seg_nis25 = genel_to(df_seg, "Nis25_Cikis", "Nis25_Ort")
+        seg_may25 = genel_to(df_seg, "Mayis25_Cikis", "Mayis25_Ort")
+        seg_ytd25 = genel_to(df_seg, "YTD25_Cikis", "YTD25_Ort")
+
+        st.markdown(f"""
+        <div class="segment-kart">
+            <p style="color:#85B7EB; font-weight:bold; margin-bottom:12px;">Segment Ortalaması ({s['Segment']}) — {len(df_seg)} Mağaza</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        sc1, sc2, sc3 = st.columns(3)
+        karsilastirmalar = [
+            ("📅 Nisan 2026", s["Nis26_TO"], seg_nis26),
+            ("📆 Mayıs 2026", s["Mayis26_TO"], seg_may26),
+            ("📊 YTD 2026", s["YTD26_TO"], seg_ytd26),
+        ]
+        for kart, (baslik, magaza_val, seg_val) in zip([sc1, sc2, sc3], karsilastirmalar):
+            with kart:
+                mag_str = f"%{magaza_val:.1f}" if not pd.isna(magaza_val) else "—"
+                seg_str = f"%{seg_val:.1f}"
+                delta = round(magaza_val - seg_val, 1) if not pd.isna(magaza_val) else 0
+                st.metric(
+                    label=baslik,
+                    value=mag_str,
+                    delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
+                    delta_color="inverse"
+                )
+
+        sc4, sc5, sc6 = st.columns(3)
+        karsilastirmalar25 = [
+            ("📅 Nisan 2025", s["Nis25_TO"], seg_nis25),
+            ("📆 Mayıs 2025", s["Mayis25_TO"], seg_may25),
+            ("📊 YTD 2025", s["YTD25_TO"], seg_ytd25),
+        ]
+        for kart, (baslik, magaza_val, seg_val) in zip([sc4, sc5, sc6], karsilastirmalar25):
+            with kart:
+                mag_str = f"%{magaza_val:.1f}" if not pd.isna(magaza_val) else "—"
+                seg_str = f"%{seg_val:.1f}"
+                delta = round(magaza_val - seg_val, 1) if not pd.isna(magaza_val) else 0
+                st.metric(
+                    label=baslik,
+                    value=mag_str,
+                    delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
+                    delta_color="inverse"
+                )
