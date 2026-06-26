@@ -24,6 +24,13 @@ st.markdown("""
         padding: 20px;
         margin: 10px 0;
     }
+    .segment-kart {
+        background-color: #1a2f5e;
+        border-left: 4px solid #4a6fa5;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 10px 0;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -56,7 +63,6 @@ def veri_yukle():
 
 df = veri_yukle()
 
-# Ay → sütun eşleştirmesi
 ay_map = {
     "Ocak":  ("Oca26_Cikis", "Oca26_Ort", "Oca26_TO", "Oca25_TO"),
     "Şubat": ("Sub26_Cikis", "Sub26_Ort", "Sub26_TO", "Sub25_TO"),
@@ -81,47 +87,46 @@ with st.sidebar:
     try:
         st.image("koton_siyah.png", width=180)
     except:
-            st.markdown("**KOTON**")
+        st.markdown("**KOTON**")
     st.markdown("**Karne Verisi - Turnover**")
     st.divider()
     st.markdown("📆 **2026 Yılı Ayları**")
     sec_ay = st.selectbox("Ay", ["Tümü (Nisan & Mayıs)", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs"], label_visibility="collapsed")
 
-    # 1. PERAKENDE MÜDÜRÜ (PM) SEÇİMİ
     pm_listesi = ["Tümü"] + sorted(df["PM"].dropna().unique().tolist())
     st.markdown("🏪 **Perakende Müdürü (PM)**")
     sec_pm = st.selectbox("PM", pm_listesi, label_visibility="collapsed")
 
-    # PM seçimine göre BM seçeneklerini filtrelemek için geçici veri oluşturuyoruz
     if sec_pm != "Tümü":
         df_temp_pm = df[df["PM"] == sec_pm]
     else:
         df_temp_pm = df.copy()
 
-    # 2. BÖLGE MÜDÜRÜ (BM) SEÇİMİ (Seçilen PM'e bağlı olarak değişir)
     bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
     st.markdown("👤 **Bölge Müdürü (BM)**")
     sec_bm = st.selectbox("BM", bm_listesi, label_visibility="collapsed")
 
-    # BM seçimine göre HRBP seçeneklerini filtrelemek için geçici veriyi güncelliyoruz
     if sec_bm != "Tümü":
         df_temp_bm = df_temp_pm[df_temp_pm["BM"] == sec_bm]
     else:
         df_temp_bm = df_temp_pm.copy()
 
-    # 3. İK İŞ ORTAĞI (HRBP) SEÇİMİ (Seçilen PM ve BM'ye bağlı olarak değişir)
     hrbp_listesi = ["Tümü"] + sorted(df_temp_bm["HRBP"].dropna().unique().tolist())
     st.markdown("🤝 **İK İş Ortağı (HRBP)**")
     sec_hrbp = st.selectbox("HRBP", hrbp_listesi, label_visibility="collapsed")
 
+    # YENİ: Segment filtresi
+    segment_listesi = ["Tümü"] + sorted(df["Segment"].dropna().unique().tolist())
+    st.markdown("🏷️ **Segment**")
+    sec_segment = st.selectbox("Segment", segment_listesi, label_visibility="collapsed")
 
 # ── FİLTRELEME ────────────────────────────────
 df_f = df.copy()
-if sec_bm   != "Tümü": df_f = df_f[df_f["BM"]   == sec_bm]
-if sec_pm   != "Tümü": df_f = df_f[df_f["PM"]   == sec_pm]
-if sec_hrbp != "Tümü": df_f = df_f[df_f["HRBP"] == sec_hrbp]
+if sec_bm      != "Tümü": df_f = df_f[df_f["BM"]      == sec_bm]
+if sec_pm      != "Tümü": df_f = df_f[df_f["PM"]      == sec_pm]
+if sec_hrbp    != "Tümü": df_f = df_f[df_f["HRBP"]    == sec_hrbp]
+if sec_segment != "Tümü": df_f = df_f[df_f["Segment"] == sec_segment]
 
-# Seçili aya göre hangi sütunları göstereceğimizi belirle
 if sec_ay == "Tümü (Nisan & Mayıs)":
     cikis26, ort26, to26_col, to25_col = "Nis26_Cikis", "Nis26_Ort", "Nis26_TO", "Nis25_TO"
     cikis25, ort25 = "Nis25_Cikis", "Nis25_Ort"
@@ -147,7 +152,6 @@ else:
     goster_ytd = True
     goster_mayis = False
 
-# KPI değerleri
 kpi26     = genel_to(df_f, cikis26, ort26)
 kpi25     = genel_to(df_f, cikis25, ort25)
 kpi_ytd26 = genel_to(df_f, ytd26_cikis, ytd26_ort)
@@ -156,10 +160,11 @@ kpi_may26 = genel_to(df_f, "Mayis26_Cikis", "Mayis26_Ort") if goster_mayis else 
 kpi_may25 = genel_to(df_f, "Mayis25_Cikis", "Mayis25_Ort") if goster_mayis else None
 
 filtre_adi = []
-if sec_bm   != "Tümü": filtre_adi.append(f"BM: {sec_bm}")
-if sec_pm   != "Tümü": filtre_adi.append(f"PM: {sec_pm}")
-if sec_hrbp != "Tümü": filtre_adi.append(f"HRBP: {sec_hrbp}")
-if sec_ay   != "Tümü (Nisan & Mayıs)": filtre_adi.append(f"Ay: {sec_ay}")
+if sec_bm      != "Tümü": filtre_adi.append(f"BM: {sec_bm}")
+if sec_pm      != "Tümü": filtre_adi.append(f"PM: {sec_pm}")
+if sec_hrbp    != "Tümü": filtre_adi.append(f"HRBP: {sec_hrbp}")
+if sec_segment != "Tümü": filtre_adi.append(f"Segment: {sec_segment}")
+if sec_ay      != "Tümü (Nisan & Mayıs)": filtre_adi.append(f"Ay: {sec_ay}")
 alt_yazi = " | ".join(filtre_adi) if filtre_adi else "Tüm Türkiye Mağazalarının Turnover Detay Verisi Aşağıda Görüntülenebilmektedir."
 
 # ── ANA BAŞLIK ────────────────────────────────
@@ -203,8 +208,7 @@ with sekme1:
             delta = round(kpi_ytd26 - kpi_ytd25, 1)
             st.metric("📊 2026 YTD Toplam TO", f"%{kpi_ytd26:.1f}", delta=f"%{delta:.1f} (vs 2025)", delta_color="inverse")
 
-    st.markdown("#### 🌐 2025 Yılı Dönemsel"
-                " Performans")
+    st.markdown("#### 🌐 2025 Yılı Dönemsel Performans")
     if goster_mayis:
         k4, k5, k6 = st.columns(3)
         with k4:
@@ -242,11 +246,10 @@ with sekme1:
     elif risk_filtre == "Normal (%20-30)":
         df_liste = df_liste[(df_liste["YTD26_TO"] > 20) & (df_liste["YTD26_TO"] <= 30)]
     elif risk_filtre == "Düşük/Normal (<=%20)":
-        df_liste = df_liste[df_liste["YTD26_TO"] <= 10]
+        df_liste = df_liste[df_liste["YTD26_TO"] <= 20]
 
     st.markdown(f"**Görüntülenen Mağaza Sayısı: {len(df_liste)}**")
 
-    # Tabloda seçili aya göre sütunlar
     if sec_ay == "Tümü (Nisan & Mayıs)":
         goster = df_liste[["Masraf_Kodu","Magaza","Il","Segment","BM","PM","HRBP",
                              "Nis25_TO","Mayis25_TO","YTD25_TO",
@@ -271,9 +274,24 @@ with sekme2:
     st.markdown("### Detaylı Mağaza Karnesi")
     st.markdown("Aşağıdaki filtreden seçim yapabilirsiniz.")
 
-    st.markdown("🔍 **İncelenecek Mağazayı Seçin**")
-    magaza_listesi = list(df_f["Masraf_Kodu"] + " — " + df_f["Magaza"])
-    sec_magaza = st.selectbox("Mağaza", magaza_listesi, label_visibility="collapsed")
+    # YENİ: İl filtresi
+    col_mag, col_il = st.columns([3, 1])
+    with col_il:
+        st.markdown("📍 **İl Filtresi**")
+        il_listesi = ["Tümü"] + sorted(df_f["Il"].dropna().unique().tolist())
+        sec_il = st.selectbox("İl", il_listesi, label_visibility="collapsed")
+
+    df_magaza = df_f.copy()
+    if sec_il != "Tümü":
+        df_magaza = df_magaza[df_magaza["Il"] == sec_il]
+
+    with col_mag:
+        st.markdown("🔍 **İncelenecek Mağazayı Seçin**")
+        magaza_listesi = list(df_magaza["Masraf_Kodu"] + " — " + df_magaza["Magaza"])
+        if not magaza_listesi:
+            st.warning("Seçili filtreye uygun mağaza bulunamadı.")
+            st.stop()
+        sec_magaza = st.selectbox("Mağaza", magaza_listesi, label_visibility="collapsed")
 
     if sec_magaza:
         kod = sec_magaza.split(" — ")[0].strip()
@@ -281,14 +299,14 @@ with sekme2:
 
         st.markdown(f"""
         <div class="magaza-kart">
-            <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">MAĞAZA BİLGİLERİ 
+            <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">MAĞAZA BİLGİLERİ</p>
             <h2 style="color:white; margin:0;">{s['Masraf_Kodu']} — {s['Magaza']}</h2>
             <br>
             <span style="color:#e0e0e0; margin-right:24px;">📍 İl: <b>{s['Il']}</b></span>
             <span style="color:#e0e0e0; margin-right:24px;">➕️ Segment: <b>{s['Segment']}</b></span>
             <br><br>
             <span style="color:#e0e0e0; margin-right:24px;">👤 BM: <b>{s['BM']}</b></span>
-            <span style="color:#e0e0e0;">🏪 PM: <b>{s['PM']}</b></span>
+            <span style="color:#e0e0e0; margin-right:24px;">🏪 PM: <b>{s['PM']}</b></span>
             <span style="color:#e0e0e0;">🤝 HRBP: <b>{s['HRBP']}</b></span>
         </div>
         """, unsafe_allow_html=True)
@@ -351,3 +369,58 @@ with sekme2:
                 barmode="group", margin=dict(l=20, r=20, t=20, b=20), height=300
             )
             st.plotly_chart(fig, use_container_width=True)
+
+        # YENİ: Segment karşılaştırması
+        st.divider()
+        st.markdown(f"#### 🏷️ Segment Karşılaştırması — {s['Segment']}")
+        st.markdown(f"<p style='color:#aaaacc;'>Bu mağazanın aynı segmentteki ({s['Segment']}) diğer mağazalarla karşılaştırması</p>", unsafe_allow_html=True)
+
+        df_seg = df[df["Segment"] == s["Segment"]]
+        seg_nis26  = genel_to(df_seg, "Nis26_Cikis",   "Nis26_Ort")
+        seg_may26  = genel_to(df_seg, "Mayis26_Cikis", "Mayis26_Ort")
+        seg_ytd26  = genel_to(df_seg, "YTD26_Cikis",   "YTD26_Ort")
+        seg_nis25  = genel_to(df_seg, "Nis25_Cikis",   "Nis25_Ort")
+        seg_may25  = genel_to(df_seg, "Mayis25_Cikis", "Mayis25_Ort")
+        seg_ytd25  = genel_to(df_seg, "YTD25_Cikis",   "YTD25_Ort")
+
+        st.markdown(f"""
+        <div class="segment-kart">
+            <p style="color:#85B7EB; font-weight:bold; margin-bottom:12px;">Segment Ortalaması ({s['Segment']}) — {len(df_seg)} Mağaza</p>
+        </div>
+        """, unsafe_allow_html=True)
+
+        sc1, sc2, sc3 = st.columns(3)
+        karsilastirmalar = [
+            ("📅 Nisan 2026", s["Nis26_TO"], seg_nis26),
+            ("📆 Mayıs 2026", s["Mayis26_TO"], seg_may26),
+            ("📊 YTD 2026",   s["YTD26_TO"],  seg_ytd26),
+        ]
+        for kart, (baslik, magaza_val, seg_val) in zip([sc1,sc2,sc3], karsilastirmalar):
+            with kart:
+                mag_str = f"%{magaza_val:.1f}" if not pd.isna(magaza_val) else "—"
+                seg_str = f"%{seg_val:.1f}"
+                delta   = round(magaza_val - seg_val, 1) if not pd.isna(magaza_val) else 0
+                st.metric(
+                    label=baslik,
+                    value=mag_str,
+                    delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
+                    delta_color="inverse"
+                )
+
+        sc4, sc5, sc6 = st.columns(3)
+        karsilastirmalar25 = [
+            ("📅 Nisan 2025", s["Nis25_TO"], seg_nis25),
+            ("📆 Mayıs 2025", s["Mayis25_TO"], seg_may25),
+            ("📊 YTD 2025",   s["YTD25_TO"],  seg_ytd25),
+        ]
+        for kart, (baslik, magaza_val, seg_val) in zip([sc4,sc5,sc6], karsilastirmalar25):
+            with kart:
+                mag_str = f"%{magaza_val:.1f}" if not pd.isna(magaza_val) else "—"
+                seg_str = f"%{seg_val:.1f}"
+                delta   = round(magaza_val - seg_val, 1) if not pd.isna(magaza_val) else 0
+                st.metric(
+                    label=baslik,
+                    value=mag_str,
+                    delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
+                    delta_color="inverse"
+                )
