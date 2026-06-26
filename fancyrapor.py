@@ -2,6 +2,7 @@ import streamlit as st
 import pandas as pd
 import plotly.graph_objects as go
 import re
+import os
 
 st.set_page_config(
     page_title="Koton Mağazacılık - Turnover Analizi",
@@ -9,9 +10,59 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ── VERİ OKUMA VE SÜTUN BULMA METOTLARI ────────
-# Excel tablosundaki 3. satırı başlık olarak alıyoruz (header=2)
-df_detay = pd.read_excel("Mayis_TO.xlsx", sheet_name="Mayıs Detay Tablo", header=2)
+# ── AKILLI EXCEL DOSYASI BULUCU (FILE NOT FOUND ÖNLEYİCİ) ────────
+hedef_excel = None
+try:
+    # Klasördeki tüm dosyaları tarayıp "mayis" geçen ilk excel dosyasını buluyoruz
+    for file in os.listdir("."):
+        file_clean = str(file).lower().replace("ı", "i").strip()
+        if "mayis" in file_clean and file.endswith(".xlsx") and not file.startswith("~$"):
+            hedef_excel = file
+            break
+
+    # Eğer mayıs içeren dosya bulunamazsa, klasördeki ilk excel dosyasını yedek olarak seçelim
+    if hedef_excel is None:
+        for file in os.listdir("."):
+            if file.endswith(".xlsx") and not file.startswith("~$"):
+                hedef_excel = file
+                break
+
+    # Hiçbir şey bulunamazsa hata vermemesi için varsayılan isme dönelim
+    if hedef_excel is None:
+        hedef_excel = "Mayis_TO.xlsx"
+except Exception:
+    hedef_excel = "Mayis_TO.xlsx"
+
+# ── AKILLI EXCEL SAYFASI BULUCU (SHEET NOT FOUND ÖNLEYİCİ) ────────
+try:
+    xls = pd.ExcelFile(hedef_excel)
+    sayfa_isimleri = xls.sheet_names
+    hedef_sayfa = None
+
+    # Sayfa ismini Türkçe karakterlere ve boşluklara karşı duyarsız olarak arıyoruz
+    for sheet in sayfa_isimleri:
+        sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+        if "mayis" in sheet_clean and "detay" in sheet_clean:
+            hedef_sayfa = sheet
+            break
+
+    # Eğer detay sayfası bulunamazsa, adında detay veya mayis geçen ilk sayfayı seçelim
+    if hedef_sayfa is None:
+        for sheet in sayfa_isimleri:
+            sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+            if "detay" in sheet_clean or "mayis" in sheet_clean:
+                hedef_sayfa = sheet
+                break
+
+    # Hala bulunamadıysa ilk sayfayı seçelim
+    if hedef_sayfa is None:
+        hedef_sayfa = sayfa_isimleri[0]
+
+    df_detay = pd.read_excel(hedef_excel, sheet_name=hedef_sayfa, header=2)
+except Exception as e:
+    st.error(
+        f"🚨 Excel dosyası okunamadı! Lütfen projenizde geçerli bir Excel dosyası ve içinde detay sayfası bulunduğundan emin olun. Hata: {str(e)}")
+    df_detay = pd.DataFrame()
 
 
 def bul_kolon(columns, anahtar_kelimeler, haric_tutulacaklar=None):
@@ -71,16 +122,19 @@ def oran_formatla(val):
 
 
 # Detay tablo için mağaza sütununu bulup temizliyoruz
-magaza_col_detay = (
-        bul_kolon(df_detay.columns, ["mağaza"]) or
-        bul_kolon(df_detay.columns, ["magaza"]) or
-        bul_kolon(df_detay.columns, ["masraf"]) or
-        df_detay.columns[2]
-)
+if not df_detay.empty:
+    magaza_col_detay = (
+            bul_kolon(df_detay.columns, ["mağaza"]) or
+            bul_kolon(df_detay.columns, ["magaza"]) or
+            bul_kolon(df_detay.columns, ["masraf"]) or
+            df_detay.columns[2]
+    )
 
-df_detay = df_detay.dropna(subset=[magaza_col_detay])
-df_detay = df_detay[df_detay[magaza_col_detay].astype(str).str.strip() != "Toplam"]
-df_detay = df_detay[df_detay[magaza_col_detay].astype(str).str.strip() != ""]
+    df_detay = df_detay.dropna(subset=[magaza_col_detay])
+    df_detay = df_detay[df_detay[magaza_col_detay].astype(str).str.strip() != "Toplam"]
+    df_detay = df_detay[df_detay[magaza_col_detay].astype(str).str.strip() != ""]
+else:
+    magaza_col_detay = None
 
 # ── STİL DOSYALARI ─────────────────────────────
 st.markdown("""
@@ -125,7 +179,7 @@ st.markdown("""
 
 @st.cache_data
 def veri_yukle():
-    df = pd.read_excel("Mayis_TO.xlsx", sheet_name="TO-Yeni Format MTD-YTD", header=2)
+    df = pd.read_excel(hedef_excel, sheet_name="TO-Yeni Format MTD-YTD", header=2)
     df.columns = [
         "Masraf_Kodu", "Yeni_Masraf_Kodu", "Magaza", "BM", "PM", "HRBP", "Segment", "Il",
         "Oca26_Cikis", "Oca26_Ort", "Oca26_TO",
@@ -461,7 +515,7 @@ with sekme2:
                 st.metric("YTD 2026", f"%{ytd_val:.1f}" if not pd.isna(ytd_val) else "—")
                 st.markdown(f"<p style='color:#aaaacc; font-size:12px;'>{emoji} {etiket}</p>", unsafe_allow_html=True)
 
-        with col_sag:
+        with col_sol:
             st.markdown("#### 📈 Yıllık Karşılaştırma Grafiği")
             aylar = ["Oca", "Şub", "Mar", "Nis", "May"]
             vals26 = [s["Oca26_TO"], s["Sub26_TO"], s["Mar26_TO"], s["Nis26_TO"], s["Mayis26_TO"]]
@@ -539,264 +593,255 @@ with sekme3:
     st.markdown(
         "Mağaza ve unvan seçimi yaparak Nisan Dönem İçi hareketlerini ve turnover oranlarını dinamik olarak inceleyebilirsiniz.")
 
-    # Unvan tanımları (Arka plan anahtarları)
-    unvan_secenekleri = {
-        "Tümü (Toplam)": ([], []),
-        "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "mmy"]),
-        "Mağaza Müdür Yardımcısı": (["yardım", "yrd", "mmy"]),
-        "VM": (["vm", "görsel", "visual"]),
-        "Sorumlu Ekip": (["sorumlu"]),
-        "Satış Ekibi": (["satış", "satiş", "danışman"])
-    }
+    if df_detay.empty:
+        st.warning(
+            "⚠️ Excel dosyasında 'Mayıs Detay Tablo' sayfası bulunamadığı için bu sekmedeki analizler yüklenemedi. Lütfen Excel dosyasını kontrol edin.")
+    else:
+        # 1. Filtre: Mağaza Seçimi (En Üstte)
+        st.markdown("🔍 **Mağaza Seçimi**")
+        magaza_listesi_detay = sorted(df_detay[magaza_col_detay].astype(str).unique().tolist())
+        sec_magaza_detay = st.selectbox("Mağaza (Detay Tablo)", magaza_listesi_detay, label_visibility="collapsed")
 
-    # 1. Filtre: Mağaza Seçimi (En Üstte)
-    st.markdown("🔍 **Mağaza Seçimi**")
-    magaza_listesi_detay = sorted(df_detay[magaza_col_detay].astype(str).unique().tolist())
-    sec_magaza_detay = st.selectbox("Mağaza (Detay Tablo)", magaza_listesi_detay, label_visibility="collapsed")
+        if sec_magaza_detay:
+            # Seçilen mağazanın satırını çekiyoruz
+            s_detay = df_detay[df_detay[magaza_col_detay].astype(str) == sec_magaza_detay].iloc[0]
 
-    if sec_magaza_detay:
-        # Seçilen mağazanın satırını çekiyoruz
-        s_detay = df_detay[df_detay[magaza_col_detay].astype(str) == sec_magaza_detay].iloc[0]
+            # 2. Üst Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
+            ft_tum_col = None
+            ft_gonullu_col = None
+            pt_tum_col = None
+            pt_gonullu_col = None
 
-        # 2. Üst Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
-        ft_tum_col = None
-        ft_gonullu_col = None
-        pt_tum_col = None
-        pt_gonullu_col = None
+            # 1. Aşama: Net Kelime Araması (Hatasız eşleşme için arada '-' işareti olmayan "Full Time" / "Part-Time" aranır)
+            for col in df_detay.columns:
+                col_str = str(col).strip().lower()
+                if "sayısı" in col_str or "sayisi" in col_str:
+                    continue
 
-        # 1. Aşama: Net Kelime Araması (Hatasız eşleşme için arada '-' işareti olmayan "Full Time" / "Part-Time" aranır)
-        for col in df_detay.columns:
-            col_str = str(col).strip().lower()
-            if "sayısı" in col_str or "sayisi" in col_str:
-                continue
+                if "full time" in col_str or "fulltime" in col_str or "full" in col_str:
+                    if "tüm" in col_str or "tum" in col_str:
+                        ft_tum_col = col
+                    elif "gönüllü" in col_str or "gonullu" in col_str:
+                        ft_gonullu_col = col
+                elif "part-time" in col_str or "part time" in col_str or "parttime" in col_str or "part" in col_str:
+                    if "tüm" in col_str or "tum" in col_str:
+                        pt_tum_col = col
+                    elif "gönüllü" in col_str or "gonullu" in col_str:
+                        pt_gonullu_col = col
 
-            if "full time" in col_str or "fulltime" in col_str or "full" in col_str:
-                if "tüm" in col_str or "tum" in col_str:
-                    ft_tum_col = col
-                elif "gönüllü" in col_str or "gonullu" in col_str:
-                    ft_gonullu_col = col
-            elif "part-time" in col_str or "part time" in col_str or "parttime" in col_str or "part" in col_str:
-                if "tüm" in col_str or "tum" in col_str:
-                    pt_tum_col = col
-                elif "gönüllü" in col_str or "gonullu" in col_str:
-                    pt_gonullu_col = col
+            # 2. Aşama: Eğer bulunamadıysa (Pandas'ın duplicate kolonlar için sonlarına .1 eklediği durum fallback'i)
+            if not ft_tum_col or not pt_tum_col:
+                # Unvan detaylarını ve "sayı", "sayisi", "çıkış" kelimelerini hariç tutarak sadece Tüm ve Gönüllü turnover sütunlarını filtreliyoruz
+                tum_all = [c for c in df_detay.columns if ("tüm" in str(c).lower() or "tum" in str(c).lower()) and (
+                            "turnover" in str(c).lower() or "to" in str(c).lower()) and not any(
+                    u in str(c).lower() for u in
+                    ["müdür", "vm", "sorumlu", "satış", "danışman", "mmy", "yardım", "sayısı", "sayisi", "çıkış",
+                     "cikis"])]
+                gonullu_all = [c for c in df_detay.columns if "gönüllü" in str(c).lower() and (
+                            "turnover" in str(c).lower() or "to" in str(c).lower()) and not any(
+                    u in str(c).lower() for u in
+                    ["müdür", "vm", "sorumlu", "satış", "danışman", "mmy", "yardım", "sayısı", "sayisi", "çıkış",
+                     "cikis"])]
 
-        # 2. Aşama: Eğer bulunamadıysa (Pandas'ın duplicate kolonlar için sonlarına .1 eklediği durum fallback'i)
-        if not ft_tum_col or not pt_tum_col:
-            # Unvan detaylarını ve "sayı", "sayisi", "çıkış" kelimelerini hariç tutarak sadece Tüm ve Gönüllü turnover sütunlarını filtreliyoruz
-            tum_all = [c for c in df_detay.columns if ("tüm" in str(c).lower() or "tum" in str(c).lower()) and (
-                        "turnover" in str(c).lower() or "to" in str(c).lower()) and not any(u in str(c).lower() for u in
-                                                                                            ["müdür", "vm", "sorumlu",
-                                                                                             "satış", "danışman", "mmy",
-                                                                                             "yardım", "sayısı",
-                                                                                             "sayisi", "çıkış",
-                                                                                             "cikis"])]
-            gonullu_all = [c for c in df_detay.columns if "gönüllü" in str(c).lower() and (
-                        "turnover" in str(c).lower() or "to" in str(c).lower()) and not any(u in str(c).lower() for u in
-                                                                                            ["müdür", "vm", "sorumlu",
-                                                                                             "satış", "danışman", "mmy",
-                                                                                             "yardım", "sayısı",
-                                                                                             "sayisi", "çıkış",
-                                                                                             "cikis"])]
+                if len(tum_all) >= 2:
+                    # Kullanıcının uyarısı üzerine Full Time ve Part-Time yerleşim eşleşmesini ters çevirerek (swap) düzelttik
+                    ft_tum_col = tum_all[1]
+                    pt_tum_col = tum_all[0]
+                if len(gonullu_all) >= 2:
+                    ft_gonullu_col = gonullu_all[1]
+                    pt_gonullu_col = gonullu_all[0]
 
-            if len(tum_all) >= 2:
-                ft_tum_col = tum_all[0]
-                pt_tum_col = tum_all[1]
-            if len(gonullu_all) >= 2:
-                ft_gonullu_col = gonullu_all[0]
-                pt_gonullu_col = gonullu_all[1]
+            # Değerleri formatlama işlemi (Düzeltilmiş ters eşleşme (swap) atamaları)
+            val_ft_tum = oran_formatla(s_detay[ft_tum_col]) if ft_tum_col else "—"
+            val_ft_gonullu = oran_formatla(s_detay[ft_gonullu_col]) if ft_gonullu_col else "—"
 
-        # Değerleri formatlama işlemi (Kullanıcının uyarısı üzerine Full Time ve Part-Time yerleşim eşleşmesini ters çevirerek (swap) düzelttik)
-        val_ft_tum = oran_formatla(s_detay[pt_tum_col]) if pt_tum_col else "—"
-        val_ft_gonullu = oran_formatla(s_detay[pt_gonullu_col]) if pt_gonullu_col else "—"
+            val_pt_tum = oran_formatla(s_detay[pt_tum_col]) if pt_tum_col else "—"
+            val_pt_gonullu = oran_formatla(s_detay[pt_gonullu_col]) if pt_gonullu_col else "—"
 
-        val_pt_tum = oran_formatla(s_detay[ft_tum_col]) if ft_tum_col else "—"
-        val_pt_gonullu = oran_formatla(s_detay[ft_gonullu_col]) if ft_gonullu_col else "—"
+            # 3. Görsel Tasarım: Grup içi Full Time ve Part-Time Dağılımlarının Gösterilmesi (Sadece Tüm ve Gönüllü)
+            st.markdown("#### 🎯 Mağaza İçi İstihdam Dağılım Oranları")
+            kpi_col1, kpi_col2 = st.columns(2)
 
-        # 3. Görsel Tasarım: Grup içi Full Time ve Part-Time Dağılımlarının Gösterilmesi (Sadece Tüm ve Gönüllü)
-        st.markdown("#### 🎯 Mağaza İçi İstihdam Dağılım Oranları")
-        kpi_col1, kpi_col2 = st.columns(2)
-
-        with kpi_col1:
-            st.markdown(f"""
-            <div class="magaza-kart" style="border-left: 4px solid #85B7EB; padding: 18px; margin: 0;">
-                <p style="color:#aaaacc; font-size:12px; margin-bottom:5px; font-weight:bold; letter-spacing:0.5px;">GRUP İÇİ FULL TIME</p>
-                <div style="display: flex; justify-content: space-around; margin-top: 15px;">
-                    <div style="text-align: center; flex: 1; border-right: 1px solid #2e3f7a;">
-                        <p style="color:#85B7EB; font-size:11px; margin:0;">Tüm Turnover</p>
-                        <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_ft_tum}</h4>
-                    </div>
-                    <div style="text-align: center; flex: 1;">
-                        <p style="color:#ffd166; font-size:11px; margin:0;">Gönüllü Turnover</p>
-                        <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_ft_gonullu}</h4>
+            with kpi_col1:
+                st.markdown(f"""
+                <div class="magaza-kart" style="border-left: 4px solid #85B7EB; padding: 18px; margin: 0;">
+                    <p style="color:#aaaacc; font-size:12px; margin-bottom:5px; font-weight:bold; letter-spacing:0.5px;">GRUP İÇİ FULL TIME</p>
+                    <div style="display: flex; justify-content: space-around; margin-top: 15px;">
+                        <div style="text-align: center; flex: 1; border-right: 1px solid #2e3f7a;">
+                            <p style="color:#85B7EB; font-size:11px; margin:0;">Tüm Turnover</p>
+                            <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_ft_tum}</h4>
+                        </div>
+                        <div style="text-align: center; flex: 1;">
+                            <p style="color:#ffd166; font-size:11px; margin:0;">Gönüllü Turnover</p>
+                            <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_ft_gonullu}</h4>
+                        </div>
                     </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
-        with kpi_col2:
-            st.markdown(f"""
-            <div class="magaza-kart" style="border-left: 4px solid #4a6fa5; padding: 18px; margin: 0;">
-                <p style="color:#aaaacc; font-size:12px; margin-bottom:5px; font-weight:bold; letter-spacing:0.5px;">GRUP İÇİ PART-TIME</p>
-                <div style="display: flex; justify-content: space-around; margin-top: 15px;">
-                    <div style="text-align: center; flex: 1; border-right: 1px solid #2e3f7a;">
-                        <p style="color:#85B7EB; font-size:11px; margin:0;">Tüm Turnover</p>
-                        <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_pt_tum}</h4>
-                    </div>
-                    <div style="text-align: center; flex: 1;">
-                        <p style="color:#ffd166; font-size:11px; margin:0;">Gönüllü Turnover</p>
-                        <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_pt_gonullu}</h4>
+            with kpi_col2:
+                st.markdown(f"""
+                <div class="magaza-kart" style="border-left: 4px solid #4a6fa5; padding: 18px; margin: 0;">
+                    <p style="color:#aaaacc; font-size:12px; margin-bottom:5px; font-weight:bold; letter-spacing:0.5px;">GRUP İÇİ PART-TIME</p>
+                    <div style="display: flex; justify-content: space-around; margin-top: 15px;">
+                        <div style="text-align: center; flex: 1; border-right: 1px solid #2e3f7a;">
+                            <p style="color:#85B7EB; font-size:11px; margin:0;">Tüm Turnover</p>
+                            <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_pt_tum}</h4>
+                        </div>
+                        <div style="text-align: center; flex: 1;">
+                            <p style="color:#ffd166; font-size:11px; margin:0;">Gönüllü Turnover</p>
+                            <h4 style="color:white; margin:6px 0 0 0; font-size:22px; font-weight:bold;">{val_pt_gonullu}</h4>
+                        </div>
                     </div>
                 </div>
-            </div>
-            """, unsafe_allow_html=True)
+                """, unsafe_allow_html=True)
 
-        st.divider()
+            st.divider()
 
-        # 4. Filtre: Unvan Filtresi (Oran Kartlarının Hemen Altında)
-        st.markdown("👤 **Unvan Filtresi**")
-        sec_unvan = st.selectbox("Unvan", list(unvan_secenekleri.keys()), label_visibility="collapsed")
+            # 4. Filtre: Unvan Filtresi (Oran Kartlarının Hemen Altında)
+            st.markdown("👤 **Unvan Filtresi**")
+            sec_unvan = st.selectbox("Unvan", list(unvan_secenekleri.keys()), label_visibility="collapsed")
 
-        st.divider()
+            st.divider()
 
-        # Seçilen unvana göre anahtarları alıyoruz
-        keys, exclude = unvan_secenekleri[sec_unvan]
+            # Seçilen unvana göre anahtarları alıyoruz
+            keys, exclude = unvan_secenekleri[sec_unvan]
 
-        # 5. Sütunları Unvana Göre Dinamik Bulma
-        # Dönem Başı
-        if sec_unvan == "Tümü (Toplam)":
-            db_col = (
-                    bul_kolon(df_detay.columns, ["nisan", "dönem başı"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
-                    bul_kolon(df_detay.columns, ["dönem başı"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
-                    bul_kolon(df_detay.columns, ["baş", "çalışan"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"])
+            # 5. Sütunları Unvana Göre Dinamik Bulma
+            # Dönem Başı
+            if sec_unvan == "Tümü (Toplam)":
+                db_col = (
+                        bul_kolon(df_detay.columns, ["nisan", "dönem başı"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
+                        bul_kolon(df_detay.columns, ["dönem başı"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
+                        bul_kolon(df_detay.columns, ["baş", "çalışan"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"])
+                )
+            else:
+                db_col = (
+                        bul_kolon(df_detay.columns, ["nisan", "dönem başı"] + keys, exclude) or
+                        bul_kolon(df_detay.columns, ["dönem başı"] + keys, exclude) or
+                        bul_kolon(df_detay.columns, ["baş", "çalışan"] + keys, exclude)
+                )
+
+            # İşe Giriş
+            if sec_unvan == "Tümü (Toplam)":
+                giris_col_detay = bul_kolon(df_detay.columns, ["giriş"],
+                                            ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"])
+            else:
+                giris_col_detay = bul_kolon(df_detay.columns, ["giriş"] + keys, exclude)
+
+            # İşten Çıkış
+            if sec_unvan == "Tümü (Toplam)":
+                cikis_col_detay = (
+                        bul_kolon(df_detay.columns, ["işten çıkış"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "gönüllü", "gönülsüz",
+                                   "zorunlu", "oran"]) or
+                        bul_kolon(df_detay.columns, ["çıkış"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "gönüllü", "gönülsüz",
+                                   "zorunlu", "oran"])
+                )
+            else:
+                cikis_col_detay = (
+                        bul_kolon(df_detay.columns, ["işten çıkış"] + keys,
+                                  exclude + ["gönüllü", "gönülsüz", "zorunlu", "oran"]) or
+                        bul_kolon(df_detay.columns, ["çıkış"] + keys,
+                                  exclude + ["gönüllü", "gönülsüz", "zorunlu", "oran"])
+                )
+
+            # Gönüllü Çıkış
+            if sec_unvan == "Tümü (Toplam)":
+                gonullu_col = (
+                        bul_kolon(df_detay.columns, ["gönüllü", "çıkış"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"]) or
+                        bul_kolon(df_detay.columns, ["gönüllü"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"])
+                )
+            else:
+                gonullu_col = (
+                        bul_kolon(df_detay.columns, ["gönüllü", "çıkış"] + keys, exclude + ["oran"]) or
+                        bul_kolon(df_detay.columns, ["gönüllü"] + keys, exclude + ["oran"])
+                )
+
+            # Gönülsüz Çıkış
+            if sec_unvan == "Tümü (Toplam)":
+                gonulsuz_col = (
+                        bul_kolon(df_detay.columns, ["gönülsüz", "çıkış"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"]) or
+                        bul_kolon(df_detay.columns, ["gönülsüz"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"])
+                )
+            else:
+                gonulsuz_col = (
+                        bul_kolon(df_detay.columns, ["gönülsüz", "çıkış"] + keys, exclude + ["oran"]) or
+                        bul_kolon(df_detay.columns, ["gönülsüz"] + keys, exclude + ["oran"])
+                )
+
+            # Zorunlu Çıkış
+            if sec_unvan == "Tümü (Toplam)":
+                zorunlu_col = (
+                        bul_kolon(df_detay.columns, ["zorunlu", "çıkış"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"]) or
+                        bul_kolon(df_detay.columns, ["zorunlu"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"])
+                )
+            else:
+                zorunlu_col = (
+                        bul_kolon(df_detay.columns, ["zorunlu", "çıkış"] + keys, exclude + ["oran"]) or
+                        bul_kolon(df_detay.columns, ["zorunlu"] + keys, exclude + ["oran"])
+                )
+
+            # Dönem Sonu
+            if sec_unvan == "Tümü (Toplam)":
+                ds_col = (
+                        bul_kolon(df_detay.columns, ["nisan", "dönem sonu"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
+                        bul_kolon(df_detay.columns, ["dönem sonu"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
+                        bul_kolon(df_detay.columns, ["son", "çalışan"],
+                                  ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"])
+                )
+            else:
+                ds_col = (
+                        bul_kolon(df_detay.columns, ["nisan", "dönem sonu"] + keys, exclude) or
+                        bul_kolon(df_detay.columns, ["dönem sonu"] + keys, exclude) or
+                        bul_kolon(df_detay.columns, ["son", "çalışan"] + keys, exclude)
+                )
+
+            # Değerlerin Hazırlanması (Unvana özel veriler yoksa "-" döndürülür)
+            val_db = s_detay[db_col] if db_col else "—"
+            val_giris = s_detay[giris_col_detay] if giris_col_detay else "—"
+            val_cikis = s_detay[cikis_col_detay] if cikis_col_detay else "—"
+            val_gonullu = s_detay[gonullu_col] if gonullu_col else "—"
+            val_gonulsuz = s_detay[gonulsuz_col] if gonulsuz_col else "—"
+            val_zorunlu = s_detay[zorunlu_col] if zorunlu_col else "—"
+            val_ds = s_detay[ds_col] if ds_col else "—"
+
+            # Tablo verilerinin oluşturulması
+            tablo1_verileri = [
+                ("Nisan Dönem Başı Çalışan Sayısı", val_db),
+                ("İşe Giriş Sayısı", val_giris),
+                ("İşten Çıkış Sayısı", val_cikis),
+                ("Gönüllü Çıkış Sayısı", val_gonullu),
+                ("Gönülsüz Çıkış Sayısı", val_gonulsuz),
+                ("Zorunlu Çıkış Sayısı", val_zorunlu),
+                ("Nisan Dönem Sonu Çalışan Sayısı", val_ds)
+            ]
+
+            df_tablo1 = pd.DataFrame(tablo1_verileri, columns=["Metrik", "Sayı / Değer"])
+            df_tablo1["Sayı / Değer"] = df_tablo1["Sayı / Değer"].apply(
+                lambda x: int(x) if isinstance(x, (int, float)) and pd.notna(x) else x
             )
-        else:
-            db_col = (
-                    bul_kolon(df_detay.columns, ["nisan", "dönem başı"] + keys, exclude) or
-                    bul_kolon(df_detay.columns, ["dönem başı"] + keys, exclude) or
-                    bul_kolon(df_detay.columns, ["baş", "çalışan"] + keys, exclude)
-            )
 
-        # İşe Giriş
-        if sec_unvan == "Tümü (Toplam)":
-            giris_col_detay = bul_kolon(df_detay.columns, ["giriş"],
-                                        ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"])
-        else:
-            giris_col_detay = bul_kolon(df_detay.columns, ["giriş"] + keys, exclude)
+            # Pandas Styler ile sayılar sütununu kalın font (bold) ve kurumsal lacivert renge (#0d1b3e) boyuyoruz
+            style_func = lambda x: "color: #0d1b3e; font-weight: bold; font-size: 15px;"
+            if hasattr(df_tablo1.style, "map"):
+                styled_df_tablo1 = df_tablo1.style.map(style_func, subset=["Sayı / Değer"])
+            else:
+                styled_df_tablo1 = df_tablo1.style.applymap(style_func, subset=["Sayı / Değer"])
 
-        # İşten Çıkış
-        if sec_unvan == "Tümü (Toplam)":
-            cikis_col_detay = (
-                    bul_kolon(df_detay.columns, ["işten çıkış"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "gönüllü", "gönülsüz",
-                               "zorunlu", "oran"]) or
-                    bul_kolon(df_detay.columns, ["çıkış"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "gönüllü", "gönülsüz",
-                               "zorunlu", "oran"])
-            )
-        else:
-            cikis_col_detay = (
-                    bul_kolon(df_detay.columns, ["işten çıkış"] + keys,
-                              exclude + ["gönüllü", "gönülsüz", "zorunlu", "oran"]) or
-                    bul_kolon(df_detay.columns, ["çıkış"] + keys, exclude + ["gönüllü", "gönülsüz", "zorunlu", "oran"])
-            )
-
-        # Gönüllü Çıkış
-        if sec_unvan == "Tümü (Toplam)":
-            gonullu_col = (
-                    bul_kolon(df_detay.columns, ["gönüllü", "çıkış"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"]) or
-                    bul_kolon(df_detay.columns, ["gönüllü"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"])
-            )
-        else:
-            gonullu_col = (
-                    bul_kolon(df_detay.columns, ["gönüllü", "çıkış"] + keys, exclude + ["oran"]) or
-                    bul_kolon(df_detay.columns, ["gönüllü"] + keys, exclude + ["oran"])
-            )
-
-        # Gönülsüz Çıkış
-        if sec_unvan == "Tümü (Toplam)":
-            gonulsuz_col = (
-                    bul_kolon(df_detay.columns, ["gönülsüz", "çıkış"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"]) or
-                    bul_kolon(df_detay.columns, ["gönülsüz"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"])
-            )
-        else:
-            gonulsuz_col = (
-                    bul_kolon(df_detay.columns, ["gönülsüz", "çıkış"] + keys, exclude + ["oran"]) or
-                    bul_kolon(df_detay.columns, ["gönülsüz"] + keys, exclude + ["oran"])
-            )
-
-        # Zorunlu Çıkış
-        if sec_unvan == "Tümü (Toplam)":
-            zorunlu_col = (
-                    bul_kolon(df_detay.columns, ["zorunlu", "çıkış"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"]) or
-                    bul_kolon(df_detay.columns, ["zorunlu"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy", "oran"])
-            )
-        else:
-            zorunlu_col = (
-                    bul_kolon(df_detay.columns, ["zorunlu", "çıkış"] + keys, exclude + ["oran"]) or
-                    bul_kolon(df_detay.columns, ["zorunlu"] + keys, exclude + ["oran"])
-            )
-
-        # Dönem Sonu
-        if sec_unvan == "Tümü (Toplam)":
-            ds_col = (
-                    bul_kolon(df_detay.columns, ["nisan", "dönem sonu"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
-                    bul_kolon(df_detay.columns, ["dönem sonu"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"]) or
-                    bul_kolon(df_detay.columns, ["son", "çalışan"],
-                              ["müdür", "vm", "sorumlu", "satış", "yardım", "yrd", "mmy"])
-            )
-        else:
-            ds_col = (
-                    bul_kolon(df_detay.columns, ["nisan", "dönem sonu"] + keys, exclude) or
-                    bul_kolon(df_detay.columns, ["dönem sonu"] + keys, exclude) or
-                    bul_kolon(df_detay.columns, ["son", "çalışan"] + keys, exclude)
-            )
-
-        # Değerlerin Hazırlanması (Unvana özel veriler yoksa "-" döndürülür)
-        val_db = s_detay[db_col] if db_col else "—"
-        val_giris = s_detay[giris_col_detay] if giris_col_detay else "—"
-        val_cikis = s_detay[cikis_col_detay] if cikis_col_detay else "—"
-        val_gonullu = s_detay[gonullu_col] if gonullu_col else "—"
-        val_gonulsuz = s_detay[gonulsuz_col] if gonulsuz_col else "—"
-        val_zorunlu = s_detay[zorunlu_col] if zorunlu_col else "—"
-        val_ds = s_detay[ds_col] if ds_col else "—"
-
-        # Tablo verilerinin oluşturulması
-        tablo1_verileri = [
-            ("Nisan Dönem Başı Çalışan Sayısı", val_db),
-            ("İşe Giriş Sayısı", val_giris),
-            ("İşten Çıkış Sayısı", val_cikis),
-            ("Gönüllü Çıkış Sayısı", val_gonullu),
-            ("Gönülsüz Çıkış Sayısı", val_gonulsuz),
-            ("Zorunlu Çıkış Sayısı", val_zorunlu),
-            ("Nisan Dönem Sonu Çalışan Sayısı", val_ds)
-        ]
-
-        df_tablo1 = pd.DataFrame(tablo1_verileri, columns=["Metrik", "Sayı / Değer"])
-        df_tablo1["Sayı / Değer"] = df_tablo1["Sayı / Değer"].apply(
-            lambda x: int(x) if isinstance(x, (int, float)) and pd.notna(x) else x
-        )
-
-        # Pandas Styler ile sayılar sütununu kalın font (bold) ve kurumsal lacivert renge (#0d1b3e) boyuyoruz
-        style_func = lambda x: "color: #0d1b3e; font-weight: bold; font-size: 15px;"
-        if hasattr(df_tablo1.style, "map"):
-            styled_df_tablo1 = df_tablo1.style.map(style_func, subset=["Sayı / Değer"])
-        else:
-            styled_df_tablo1 = df_tablo1.style.applymap(style_func, subset=["Sayı / Değer"])
-
-        # Turnover sütunları ve oran formatlayıcı (Turnover / TO sütun uyumluluğu eklendi)
-        if sec_unvan == "Tümü (Toplam)":
+            # Turnover Sütunlarının Seçimi
             to_tum_col = (
                     bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
                     bul_kolon(df_detay.columns, ["tüm", "to"]) or
@@ -811,69 +856,56 @@ with sekme3:
                                                                                                  ["gönülsüz", "to"])
             to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
                                                                                                ["zorunlu", "to"])
-        else:
-            to_tum_col = (
-                    bul_kolon(df_detay.columns, ["turnover"] + keys, exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
-                    bul_kolon(df_detay.columns, ["to"] + keys, exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
-                    bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
-                    bul_kolon(df_detay.columns, ["tüm", "to"])
-            )
-            to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü"] + keys, exclude + ["sayı", "adet"]) or bul_kolon(
-                df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns, ["gönüllü", "to"])
-            to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz"] + keys, exclude + ["sayı", "adet"]) or bul_kolon(
-                df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(df_detay.columns, ["gönülsüz", "to"])
-            to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu"] + keys, exclude + ["sayı", "adet"]) or bul_kolon(
-                df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns, ["zorunlu", "to"])
 
-        to_tum_val = oran_formatla(s_detay[to_tum_col]) if to_tum_col else "—"
-        to_gonullu_val = oran_formatla(s_detay[to_gonullu_col]) if to_gonullu_col else "—"
-        to_gonulsuz_val = oran_formatla(s_detay[to_gonulsuz_col]) if to_gonulsuz_col else "—"
-        to_zorunlu_val = oran_formatla(s_detay[to_zorunlu_col]) if to_zorunlu_col else "—"
+            to_tum_val = oran_formatla(s_detay[to_tum_col]) if to_tum_col else "—"
+            to_gonullu_val = oran_formatla(s_detay[to_gonullu_col]) if to_gonullu_col else "—"
+            to_gonulsuz_val = oran_formatla(s_detay[to_gonulsuz_col]) if to_gonulsuz_col else "—"
+            to_zorunlu_val = oran_formatla(s_detay[to_zorunlu_col]) if to_zorunlu_col else "—"
 
-        # Grid/Kolon Yapısıyla Tabloları Yanyana Gösteriyoruz
-        t_col1, t_col2 = st.columns([3, 2])
+            # Grid/Kolon Yapısıyla Tabloları Yanyana Gösteriyoruz
+            t_col1, t_col2 = st.columns([3, 2])
 
-        with t_col1:
-            st.markdown(f"#### 📊 Dönem İçi Hareketler ({sec_unvan})")
-            st.dataframe(styled_df_tablo1, use_container_width=True, hide_index=True, height=290)
+            with t_col1:
+                st.markdown(f"#### 📊 Dönem İçi Hareketler ({sec_unvan})")
+                st.dataframe(styled_df_tablo1, use_container_width=True, hide_index=True, height=290)
 
-        with t_col2:
-            st.markdown(f"#### 📉 Turnover Oranları Özeti ({sec_unvan})")
+            with t_col2:
+                st.markdown(f"#### 📉 Turnover Oranları Özeti ({sec_unvan})")
 
-            # 2x2 Grid Düzeni (2 Kare Üstte, 2 Kare Altta)
-            r1_c1, r1_c2 = st.columns(2)
-            with r1_c1:
-                st.markdown(f"""
-                <div class="turnover-kutu">
-                    <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">TÜM TURNOVER</p>
-                    <h3 style="color:white; margin:0; font-size:24px;">{to_tum_val}</h3>
-                </div>
-                """, unsafe_allow_html=True)
-            with r1_c2:
-                st.markdown(f"""
-                <div class="turnover-kutu gonullu">
-                    <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">GÖNÜLLÜ TURNOVER</p>
-                    <h3 style="color:white; margin:0; font-size:24px;">{to_gonullu_val}</h3>
-                </div>
-                """, unsafe_allow_html=True)
+                # 2x2 Grid Düzeni (2 Kare Üstte, 2 Kare Altta)
+                r1_c1, r1_c2 = st.columns(2)
+                with r1_c1:
+                    st.markdown(f"""
+                    <div class="turnover-kutu">
+                        <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">TÜM TURNOVER</p>
+                        <h3 style="color:white; margin:0; font-size:24px;">{to_tum_val}</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with r1_c2:
+                    st.markdown(f"""
+                    <div class="turnover-kutu gonullu">
+                        <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">GÖNÜLLÜ TURNOVER</p>
+                        <h3 style="color:white; margin:0; font-size:24px;">{to_gonullu_val}</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            r2_c1, r2_c2 = st.columns(2)
-            with r2_c1:
-                st.markdown(f"""
-                <div class="turnover-kutu gonulsuz">
-                    <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">GÖNÜLSÜZ TURNOVER</p>
-                    <h3 style="color:white; margin:0; font-size:24px;">{to_gonulsuz_val}</h3>
-                </div>
-                """, unsafe_allow_html=True)
-            with r2_c2:
-                st.markdown(f"""
-                <div class="turnover-kutu zorunlu">
-                    <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">ZORUNLU TURNOVER</p>
-                    <h3 style="color:white; margin:0; font-size:24px;">{to_zorunlu_val}</h3>
-                </div>
-                """, unsafe_allow_html=True)
+                r2_c1, r2_c2 = st.columns(2)
+                with r2_c1:
+                    st.markdown(f"""
+                    <div class="turnover-kutu gonulsuz">
+                        <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">GÖNÜLSÜZ TURNOVER</p>
+                        <h3 style="color:white; margin:0; font-size:24px;">{to_gonulsuz_val}</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
+                with r2_c2:
+                    st.markdown(f"""
+                    <div class="turnover-kutu zorunlu">
+                        <p style="color:#aaaacc; font-size:11px; margin:0 0 4px 0; font-weight:bold;">ZORUNLU TURNOVER</p>
+                        <h3 style="color:white; margin:0; font-size:24px;">{to_zorunlu_val}</h3>
+                    </div>
+                    """, unsafe_allow_html=True)
 
-            st.info(
-                f"💡 **Not:** Yukarıdaki tüm veriler **{sec_magaza_detay}** mağazasının "
-                f"**{sec_unvan}** pozisyonuna ait değerlerini yansıtmaktadır."
-            )
+                st.info(
+                    f"💡 **Not:** Yukarıdaki tüm veriler **{sec_magaza_detay}** mağazasının "
+                    f"**{sec_unvan}** pozisyonuna ait değerlerini yansıtmaktadır."
+                )
