@@ -116,7 +116,8 @@ with st.sidebar:
     sec_hrbp = st.selectbox("HRBP", hrbp_listesi, label_visibility="collapsed")
 
     # YENİ: Segment filtresi
-    segment_listesi = ["Tümü"] + sorted(df["Segment"].dropna().unique().tolist())
+    segment_sirasi = ["FS", "A++", "A+", "A", "B", "C", "D"]
+    segment_listesi = ["Tümü"] + [s for s in segment_sirasi if s in df["Segment"].dropna().unique().tolist()]
     st.markdown("🏷️ **Segment**")
     sec_segment = st.selectbox("Segment", segment_listesi, label_visibility="collapsed")
 
