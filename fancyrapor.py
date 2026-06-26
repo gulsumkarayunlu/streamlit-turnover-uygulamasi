@@ -11,6 +11,18 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ── FILTRE SIFIRLAMA ICIN SESSION STATE TANIMLARI ────────
+if 'ay_key' not in st.session_state:
+    st.session_state.ay_key = "Tümü (Nisan & Mayıs)"
+if 'pm_key' not in st.session_state:
+    st.session_state.pm_key = "Tümü"
+if 'bm_key' not in st.session_state:
+    st.session_state.bm_key = "Tümü"
+if 'hrbp_key' not in st.session_state:
+    st.session_state.hrbp_key = "Tümü"
+if 'segment_key' not in st.session_state:
+    st.session_state.segment_key = "Tümü"
+
 # ── AKILLI EXCEL DOSYASI BULUCU (FILE NOT FOUND ÖNLEYİCİ) ────────
 hedef_excel = None
 try:
@@ -250,7 +262,7 @@ def risk_etiketi(to):
     return "Düşük", "🟢"
 
 
-# ── SOL PANEL ──────────────────────────────────
+# ── SOL PANEL (FİLTRELER) ──────────────────────
 with st.sidebar:
     try:
         st.image("koton_siyah.png", width=180)
@@ -258,13 +270,27 @@ with st.sidebar:
         st.markdown("**KOTON**")
     st.markdown("**Karne Verisi - Turnover**")
     st.divider()
+
+    # YENİ: Tüm Filtreleri Temizle Butonu (En Üstte)
+    if st.button("🔄 Tüm Filtreleri Temizle", use_container_width=True):
+        st.session_state.ay_key = "Tümü (Nisan & Mayıs)"
+        st.session_state.pm_key = "Tümü"
+        st.session_state.bm_key = "Tümü"
+        st.session_state.hrbp_key = "Tümü"
+        st.session_state.segment_key = "Tümü"
+        st.rerun()
+
     st.markdown("📆 **2026 Yılı Ayları**")
-    sec_ay = st.selectbox("Ay", ["Tümü (Nisan & Mayıs)", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs"],
-                          label_visibility="collapsed")
+    ay_options = ["Tümü (Nisan & Mayıs)", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs"]
+    ay_idx = ay_options.index(st.session_state.ay_key) if st.session_state.ay_key in ay_options else 0
+    sec_ay = st.selectbox("Ay", ay_options, index=ay_idx, key="ay_select", label_visibility="collapsed")
+    st.session_state.ay_key = sec_ay
 
     pm_listesi = ["Tümü"] + sorted(df["PM"].dropna().unique().tolist())
+    pm_idx = pm_listesi.index(st.session_state.pm_key) if st.session_state.pm_key in pm_listesi else 0
     st.markdown("🏪 **Perakende Müdürlüğü (PM)**")
-    sec_pm = st.selectbox("PM", pm_listesi, label_visibility="collapsed")
+    sec_pm = st.selectbox("PM", pm_listesi, index=pm_idx, key="pm_select", label_visibility="collapsed")
+    st.session_state.pm_key = sec_pm
 
     if sec_pm != "Tümü":
         df_temp_pm = df[df["PM"] == sec_pm]
@@ -272,8 +298,10 @@ with st.sidebar:
         df_temp_pm = df.copy()
 
     bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
-    st.markdown("👤 **Bölge Müdürlüğü (BM)**")
-    sec_bm = st.selectbox("BM", bm_listesi, label_visibility="collapsed")
+    bm_idx = bm_listesi.index(st.session_state.bm_key) if st.session_state.bm_key in bm_listesi else 0
+    st.markdown("👤 **Bölge Müdürü (BM)**")
+    sec_bm = st.selectbox("BM", bm_listesi, index=bm_idx, key="bm_select", label_visibility="collapsed")
+    st.session_state.bm_key = sec_bm
 
     if sec_bm != "Tümü":
         df_temp_bm = df_temp_pm[df_temp_pm["BM"] == sec_bm]
@@ -281,13 +309,19 @@ with st.sidebar:
         df_temp_bm = df_temp_pm.copy()
 
     hrbp_listesi = ["Tümü"] + sorted(df_temp_bm["HRBP"].dropna().unique().tolist())
+    hrbp_idx = hrbp_listesi.index(st.session_state.hrbp_key) if st.session_state.hrbp_key in hrbp_listesi else 0
     st.markdown("🤝 **İK İş Ortağı (HRBP)**")
-    sec_hrbp = st.selectbox("HRBP", hrbp_listesi, label_visibility="collapsed")
+    sec_hrbp = st.selectbox("HRBP", hrbp_listesi, index=hrbp_idx, key="hrbp_select", label_visibility="collapsed")
+    st.session_state.hrbp_key = sec_hrbp
 
     segment_sirasi = ["FS", "A++", "A+", "A", "B", "C", "D"]
     segment_listesi = ["Tümü"] + [s for s in segment_sirasi if s in df["Segment"].dropna().unique().tolist()]
+    segment_idx = segment_listesi.index(
+        st.session_state.segment_key) if st.session_state.segment_key in segment_listesi else 0
     st.markdown("🏷️ **Segment**")
-    sec_segment = st.selectbox("Segment", segment_listesi, label_visibility="collapsed")
+    sec_segment = st.selectbox("Segment", segment_listesi, index=segment_idx, key="segment_select",
+                               label_visibility="collapsed")
+    st.session_state.segment_key = sec_segment
 
 # ── FİLTRELEME ────────────────────────────────
 df_f = df.copy()
@@ -451,9 +485,11 @@ with sekme1:
 # ── SEKME 2 ───────────────────────────────────
 with sekme2:
     st.markdown("### Detaylı Mağaza Karnesi")
-    st.markdown("Aşağıdaki filtreden seçim yapabilirsiniz.")
+    st.markdown("Aşağıdaki filtrelerden seçim yapabilirsiniz.")
 
-    col_mag, col_il = st.columns([3, 1])
+    # GÜNCELLEME: İl filtresi Mağaza filtresinin soluna (önüne) taşındı
+    col_il, col_mag = st.columns([1, 3])
+
     with col_il:
         st.markdown("📍 **İl Filtresi**")
         il_listesi = ["Tümü"] + sorted(df_f["Il"].dropna().unique().tolist())
@@ -624,7 +660,6 @@ with sekme3:
         sec_magaza_detay = st.selectbox("Mağaza (Detay Tablo)", magaza_listesi_detay, label_visibility="collapsed")
 
         if sec_magaza_detay:
-            # Hataların tarayıcı ekranına düzgünce yazılması ve çökmenin önlenmesi için tüm render akışını güvenlik çemberine alıyoruz
             try:
                 # Seçilen mağazanın satırını çekiyoruz
                 s_detay = df_detay[df_detay[magaza_col_detay].astype(str) == sec_magaza_detay].iloc[0]
@@ -654,7 +689,6 @@ with sekme3:
 
                 # 2. Aşama: Eğer bulunamadıysa (Pandas'ın duplicate kolonlar için sonlarına .1 eklediği durum fallback'i)
                 if not ft_tum_col or not pt_tum_col:
-                    # Unvan detaylarını ve "sayı", "sayisi", "çıkış" kelimelerini hariç tutarak sadece Tüm ve Gönüllü turnover sütunlarını filtreliyoruz
                     tum_all = [c for c in df_detay.columns if ("tüm" in str(c).lower() or "tum" in str(c).lower()) and (
                                 "turnover" in str(c).lower() or "to" in str(c).lower()) and not any(
                         u in str(c).lower() for u in
@@ -667,7 +701,6 @@ with sekme3:
                          "cikis"])]
 
                     if len(tum_all) >= 2:
-                        # Kullanıcının uyarısı üzerine Full Time ve Part-Time yerleşim eşleşmesini ters çevirerek (swap) düzelttik
                         ft_tum_col = tum_all[1]
                         pt_tum_col = tum_all[0]
                     if len(gonullu_all) >= 2:
@@ -864,45 +897,22 @@ with sekme3:
                 else:
                     styled_df_tablo1 = df_tablo1.style.applymap(style_func, subset=["Sayı / Değer"])
 
-                # Turnover sütunları ve oran formatlayıcı (Turnover / TO sütun uyumluluğu eklendi)
-                if sec_unvan == "Tümü (Toplam)":
-                    to_tum_col = (
-                            bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
-                            bul_kolon(df_detay.columns, ["tüm", "to"]) or
-                            bul_kolon(df_detay.columns, ["toplam", "turnover"]) or
-                            bul_kolon(df_detay.columns, ["toplam", "to"]) or
-                            bul_kolon(df_detay.columns, ["turnover"],
-                                      haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"]) or
-                            bul_kolon(df_detay.columns, ["to"], haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"])
-                    )
-                    to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                       ["gönüllü",
-                                                                                                        "to"])
-                    to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(
-                        df_detay.columns, ["gönülsüz", "to"])
-                    to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                       ["zorunlu",
-                                                                                                        "to"])
-                else:
-                    to_tum_col = (
-                            bul_kolon(df_detay.columns, ["turnover"] + keys,
-                                      exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
-                            bul_kolon(df_detay.columns, ["to"] + keys, exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
-                            bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
-                            bul_kolon(df_detay.columns, ["tüm", "to"])
-                    )
-                    to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü"] + keys,
-                                               exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["gönüllü",
-                                                                                                           "turnover"]) or bul_kolon(
-                        df_detay.columns, ["gönüllü", "to"])
-                    to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz"] + keys,
-                                                exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["gönülsüz",
-                                                                                                            "turnover"]) or bul_kolon(
-                        df_detay.columns, ["gönülsüz", "to"])
-                    to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu"] + keys,
-                                               exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["zorunlu",
-                                                                                                           "turnover"]) or bul_kolon(
-                        df_detay.columns, ["zorunlu", "to"])
+                # Turnover Sütunlarının Seçimi
+                to_tum_col = (
+                        bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
+                        bul_kolon(df_detay.columns, ["tüm", "to"]) or
+                        bul_kolon(df_detay.columns, ["toplam", "turnover"]) or
+                        bul_kolon(df_detay.columns, ["toplam", "to"]) or
+                        bul_kolon(df_detay.columns, ["turnover"],
+                                  haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"]) or
+                        bul_kolon(df_detay.columns, ["to"], haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"])
+                )
+                to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                   ["gönüllü", "to"])
+                to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                     ["gönülsüz", "to"])
+                to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                   ["zorunlu", "to"])
 
                 to_tum_val = oran_formatla(s_detay[to_tum_col]) if to_tum_col else "—"
                 to_gonullu_val = oran_formatla(s_detay[to_gonullu_col]) if to_gonullu_col else "—"
