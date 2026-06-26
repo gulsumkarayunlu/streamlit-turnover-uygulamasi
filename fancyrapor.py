@@ -11,7 +11,7 @@ st.set_page_config(
 
 # ── VERİ OKUMA VE SÜTUN BULMA METOTLARI ────────
 # Excel tablosundaki 3. satırı başlık olarak alıyoruz (header=2)
-df_detay = pd.read_excel("Mayıs_TO.xlsx", sheet_name="Mayıs Detay Tablo", header=2)
+df_detay = pd.read_excel("Mayis_TO.xlsx", sheet_name="Mayıs Detay Tablo", header=2)
 
 
 def bul_kolon(columns, anahtar_kelimeler, haric_tutulacaklar=None):
@@ -125,7 +125,7 @@ st.markdown("""
 
 @st.cache_data
 def veri_yukle():
-    df = pd.read_excel("Mayıs_TO.xlsx", sheet_name="TO-Yeni Format MTD-YTD", header=2)
+    df = pd.read_excel("Mayis_TO.xlsx", sheet_name="TO-Yeni Format MTD-YTD", header=2)
     df.columns = [
         "Masraf_Kodu", "Yeni_Masraf_Kodu", "Magaza", "BM", "PM", "HRBP", "Segment", "Il",
         "Oca26_Cikis", "Oca26_Ort", "Oca26_TO",
