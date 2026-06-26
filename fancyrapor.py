@@ -87,15 +87,30 @@ with st.sidebar:
     st.markdown("📆 **2026 Yılı Ayları**")
     sec_ay = st.selectbox("Ay", ["Tümü (Nisan & Mayıs)", "Ocak", "Şubat", "Mart", "Nisan", "Mayıs"], label_visibility="collapsed")
 
-
-    bm_listesi  = ["Tümü"] + sorted(df["BM"].dropna().unique().tolist())
-    pm_listesi  = ["Tümü"] + sorted(df["PM"].dropna().unique().tolist())
-    hrbp_listesi = ["Tümü"] + sorted(df["HRBP"].dropna().unique().tolist())
-
-    st.markdown("👤 **Bölge Müdürü (BM)**")
-    sec_bm   = st.selectbox("BM",   bm_listesi,   label_visibility="collapsed")
+    # 1. PERAKENDE MÜDÜRÜ (PM) SEÇİMİ
+    pm_listesi = ["Tümü"] + sorted(df["PM"].dropna().unique().tolist())
     st.markdown("🏪 **Perakende Müdürü (PM)**")
-    sec_pm   = st.selectbox("PM",   pm_listesi,   label_visibility="collapsed")
+    sec_pm = st.selectbox("PM", pm_listesi, label_visibility="collapsed")
+
+    # PM seçimine göre BM seçeneklerini filtrelemek için geçici veri oluşturuyoruz
+    if sec_pm != "Tümü":
+        df_temp_pm = df[df["PM"] == sec_pm]
+    else:
+        df_temp_pm = df.copy()
+
+    # 2. BÖLGE MÜDÜRÜ (BM) SEÇİMİ (Seçilen PM'e bağlı olarak değişir)
+    bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
+    st.markdown("👤 **Bölge Müdürü (BM)**")
+    sec_bm = st.selectbox("BM", bm_listesi, label_visibility="collapsed")
+
+    # BM seçimine göre HRBP seçeneklerini filtrelemek için geçici veriyi güncelliyoruz
+    if sec_bm != "Tümü":
+        df_temp_bm = df_temp_pm[df_temp_pm["BM"] == sec_bm]
+    else:
+        df_temp_bm = df_temp_pm.copy()
+
+    # 3. İK İŞ ORTAĞI (HRBP) SEÇİMİ (Seçilen PM ve BM'ye bağlı olarak değişir)
+    hrbp_listesi = ["Tümü"] + sorted(df_temp_bm["HRBP"].dropna().unique().tolist())
     st.markdown("🤝 **İK İş Ortağı (HRBP)**")
     sec_hrbp = st.selectbox("HRBP", hrbp_listesi, label_visibility="collapsed")
 
