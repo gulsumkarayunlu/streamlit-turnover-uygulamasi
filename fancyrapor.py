@@ -395,22 +395,28 @@ with sekme1:
     if goster_mayis:
         k1, k2, k3 = st.columns(3)
         with k1:
+            d = round(kpi26 - kpi25, 1)
+            # delta'yı tersine çeviriyoruz: düşüş = iyi = yeşil (normal), artış = kötü = kırmızı (inverse)
             st.metric("📅 2026 Nisan TO", f"%{kpi26:.1f}",
-                      delta=f"%{round(kpi26-kpi25,1):.1f} (vs 2025 Nisan)", delta_color="inverse")
+                      delta=f"%{d:.1f} (vs 2025 Nisan)", delta_color="normal" if d <= 0 else "inverse")
         with k2:
+            d = round(kpi_may26 - kpi_may25, 1)
             st.metric("📆 2026 Mayıs TO MTD", f"%{kpi_may26:.1f}",
-                      delta=f"%{round(kpi_may26-kpi_may25,1):.1f} (vs 2025 Mayıs)", delta_color="inverse")
+                      delta=f"%{d:.1f} (vs 2025 Mayıs)", delta_color="normal" if d <= 0 else "inverse")
         with k3:
+            d = round(kpi_ytd26 - kpi_ytd25, 1)
             st.metric("📊 2026 YTD Toplam TO", f"%{kpi_ytd26:.1f}",
-                      delta=f"%{round(kpi_ytd26-kpi_ytd25,1):.1f} (vs 2025 YTD)", delta_color="inverse")
+                      delta=f"%{d:.1f} (vs 2025 YTD)", delta_color="normal" if d <= 0 else "inverse")
     else:
         k1, k2 = st.columns(2)
         with k1:
+            d = round(kpi26 - kpi25, 1)
             st.metric(f"📅 {ana_baslik26}", f"%{kpi26:.1f}",
-                      delta=f"%{round(kpi26-kpi25,1):.1f} (vs 2025)", delta_color="inverse")
+                      delta=f"%{d:.1f} (vs 2025)", delta_color="normal" if d <= 0 else "inverse")
         with k2:
+            d = round(kpi_ytd26 - kpi_ytd25, 1)
             st.metric("📊 2026 YTD Toplam TO", f"%{kpi_ytd26:.1f}",
-                      delta=f"%{round(kpi_ytd26-kpi_ytd25,1):.1f} (vs 2025)", delta_color="inverse")
+                      delta=f"%{d:.1f} (vs 2025)", delta_color="normal" if d <= 0 else "inverse")
 
     st.markdown("#### 🌐 2025 Yılı Dönemsel Performans")
     if goster_mayis:
@@ -878,7 +884,7 @@ with sekme3:
             with kart:
                 mag_str = f"%{mv:.1f}" if not pd.isna(mv) else "—"
                 delta   = round(mv - sv, 1) if not pd.isna(mv) else 0
-                st.metric(baslik, mag_str, delta=f"%{delta:.1f} (Seg. Ort: %{sv:.1f})", delta_color="inverse")
+                st.metric(baslik, mag_str, delta=f"%{-delta:.1f} (Seg. Ort: %{sv:.1f})", delta_color="normal")
 
         sc4, sc5, sc6 = st.columns(3)
         for kart, baslik, mv, sv in zip(
