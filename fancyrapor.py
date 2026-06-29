@@ -11,6 +11,16 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
+# ── 1. GLOBAL UNVAN TANIMLARI (EN BAŞA ALINDI - NAME ERROR ÖNLEYİCİ) ────────
+unvan_secenekleri = {
+    "Tümü (Toplam)": ([], []),
+    "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "mmy"]),
+    "Mağaza Müdür Yardımcısı": (["yardım", "yrd", "mmy"], []),
+    "VM": (["vm", "görsel", "visual"], []),
+    "Sorumlu Ekip": (["sorumlu"], []),
+    "Satış Ekibi": (["satış", "satiş", "danışman"], [])
+}
+
 # ── FILTRE SIFIRLAMA ICIN SESSION STATE TANIMLARI ────────
 if 'ay_key' not in st.session_state:
     st.session_state.ay_key = "Tümü (Nisan & Mayıs)"
@@ -46,48 +56,8 @@ try:
 except Exception:
     hedef_excel = "Mayis_TO.xlsx"
 
-# ── AKILLI EXCEL SAYFASI BULUCU (SHEET NOT FOUND ÖNLEYİCİ) ────────
-try:
-    xls = pd.ExcelFile(hedef_excel)
-    sayfa_isimleri = xls.sheet_names
-    hedef_sayfa = None
 
-    # Sayfa ismini Türkçe karakterlere ve boşluklara karşı duyarsız olarak arıyoruz
-    for sheet in sayfa_isimleri:
-        sheet_clean = str(sheet).strip().lower().replace("ı", "i")
-        if "mayis" in sheet_clean and "detay" in sheet_clean:
-            hedef_sayfa = sheet
-            break
-
-    # Eğer detay sayfası bulunamazsa, adında detay veya mayis geçen ilk sayfayı seçelim
-    if hedef_sayfa is None:
-        for sheet in sayfa_isimleri:
-            sheet_clean = str(sheet).strip().lower().replace("ı", "i")
-            if "detay" in sheet_clean or "mayis" in sheet_clean:
-                hedef_sayfa = sheet
-                break
-
-    # Hala bulunamadıysa ilk sayfayı seçelim
-    if hedef_sayfa is None:
-        hedef_sayfa = sayfa_isimleri[0]
-
-    df_detay = pd.read_excel(hedef_excel, sheet_name=hedef_sayfa, header=2)
-except Exception as e:
-    st.error(
-        f"🚨 Excel dosyası okunamadı! Lütfen projenizde geçerli bir Excel dosyası ve içinde detay sayfası bulunduğundan emin olun. Hata: {str(e)}")
-    df_detay = pd.DataFrame()
-
-# ── GLOBAL UNVAN TANIMLARI ────────
-unvan_secenekleri = {
-    "Tümü (Toplam)": ([], []),
-    "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "mmy"]),
-    "Mağaza Müdür Yardımcısı": (["yardım", "yrd", "mmy"], []),
-    "VM": (["vm", "görsel", "visual"], []),
-    "Sorumlu Ekip": (["sorumlu"], []),
-    "Satış Ekibi": (["satış", "satiş", "danışman"], [])
-}
-
-
+# ── YARDIMCI VE HESAPLAMA METOTLARI ────────
 def bul_kolon(columns, anahtar_kelimeler, haric_tutulacaklar=None):
     """
     Excel başlıklarında yazım farklılıkları olsa bile
@@ -144,7 +114,114 @@ def oran_formatla(val):
     return f"%{parsed:.1f}"
 
 
-# Detay tablo için mağaza sütununu bulup temizliyoruz (Daha güvenli hale getirildi)
+# Ana turnover hesaplayıcı fonksiyonlar
+def genel_to(df_f, cikis_col, ort_col):
+    c = pd.to_numeric(df_f[cikis_col], errors="coerce").sum()
+    o = pd.to_numeric(df_f[ort_col], errors="coerce").sum()
+    return round((c / o) * 100, 1) if o > 0 else 0.0
+
+
+def risk_etiketi(to):
+    if pd.isna(to): return "—", "⚪"
+    if to > 20: return "Yüksek", "🔴"
+    if to > 10: return "Normal", "🟡"
+    return "Düşük", "🟢"
+
+
+# ── AKILLI VERI YUKLEME METODU ────────
+@st.cache_data
+def veri_yukle():
+    df = pd.read_excel(hedef_excel, sheet_name="TO-Yeni Format MTD-YTD", header=2)
+    df.columns = [
+        "Masraf_Kodu", "Yeni_Masraf_Kodu", "Magaza", "BM", "PM", "HRBP", "Segment", "Il",
+        "Oca26_Cikis", "Oca26_Ort", "Oca26_TO",
+        "Sub26_Cikis", "Sub26_Ort", "Sub26_TO",
+        "Mar26_Cikis", "Mar26_Ort", "Mar26_TO",
+        "Nis26_Cikis", "Nis26_Ort", "Nis26_TO",
+        "Mayis26_Cikis", "Mayis26_Ort", "Mayis26_TO",
+        "YTD26_Cikis", "YTD26_Ort", "YTD26_TO",
+        "Oca25_Cikis", "Oca25_Ort", "Oca25_TO",
+        "Sub25_Cikis", "Sub25_Ort", "Sub25_TO",
+        "Mar25_Cikis", "Mar25_Ort", "Mar25_TO",
+        "Nis25_Cikis", "Nis25_Ort", "Nis25_TO",
+        "Mayis25_Cikis", "Mayis25_Ort", "Mayis25_TO",
+        "YTD25_Cikis", "YTD25_Ort", "YTD25_TO"
+    ]
+    df = df.dropna(subset=["Masraf_Kodu"])
+    df = df[df["Masraf_Kodu"].astype(str).str.strip() != "Toplam"]
+    df = df.reset_index(drop=True)
+    to_cols = ["Oca26_TO", "Sub26_TO", "Mar26_TO", "Nis26_TO", "Mayis26_TO", "YTD26_TO",
+               "Oca25_TO", "Sub25_TO", "Mar25_TO", "Nis25_TO", "Mayis25_TO", "YTD25_TO"]
+    for col in to_cols:
+        df[col] = pd.to_numeric(df[col], errors="coerce") * 100
+    return df
+
+
+# 1. Ana veriyi yüklüyoruz
+df = veri_yukle()
+
+# ── AKILLI EXCEL SAYFALARI BULUCU ────────
+try:
+    xls = pd.ExcelFile(hedef_excel)
+    sayfa_isimleri = xls.sheet_names
+    hedef_sayfa = None
+
+    # Sayfa ismini Türkçe karakterlere ve boşluklara karşı duyarsız olarak arıyoruz
+    for sheet in sayfa_isimleri:
+        sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+        if "mayis" in sheet_clean and "detay" in sheet_clean:
+            hedef_sayfa = sheet
+            break
+
+    if hedef_sayfa is None:
+        for sheet in sayfa_isimleri:
+            sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+            if "detay" in sheet_clean or "mayis" in sheet_clean:
+                hedef_sayfa = sheet
+                break
+
+    if hedef_sayfa is None:
+        hedef_sayfa = sayfa_isimleri[0]
+
+    df_detay = pd.read_excel(hedef_excel, sheet_name=hedef_sayfa, header=2)
+except Exception as e:
+    st.error(f"🚨 Excel dosyası okunamadı! Lütfen projenizde detay sayfasının bulunduğundan emin olun. Hata: {str(e)}")
+    df_detay = pd.DataFrame()
+
+# Yasal bildirimler sayfasını okuyoruz
+try:
+    hedef_yasal_sayfa = None
+    for sheet in sayfa_isimleri:
+        sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+        if "yasal" in sheet_clean and "bildirim" in sheet_clean:
+            hedef_yasal_sayfa = sheet
+            break
+
+    if hedef_yasal_sayfa is None:
+        for sheet in sayfa_isimleri:
+            sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+            if "yasal" in sheet_clean or "bildirim" in sheet_clean:
+                hedef_yasal_sayfa = sheet
+                break
+
+    if hedef_yasal_sayfa:
+        df_yasal = None
+        for h in [0, 1, 2, 3]:
+            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa, header=h)
+            df_temp = df_temp.dropna(how="all")
+            has_exit = any("çıkış" in str(col).lower() or "cikis" in str(col).lower() for col in df_temp.columns)
+            has_notice = any("bildirim" in str(col).lower() or "bildi" in str(col).lower() for col in df_temp.columns)
+            if has_exit or has_notice:
+                df_yasal = df_temp
+                break
+        if df_yasal is None:
+            df_yasal = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa)
+    else:
+        df_yasal = pd.DataFrame()
+except Exception:
+    df_yasal = pd.DataFrame()
+
+# ── DETAY TABLOSU SÜTUN EŞLEŞTİRMELERİ ────────
 if not df_detay.empty:
     magaza_col_detay = (
             bul_kolon(df_detay.columns, ["mağaza"]) or
@@ -168,6 +245,48 @@ if not df_detay.empty:
         df_detay = df_detay[df_detay[magaza_col_detay].astype(str).str.strip() != ""]
 else:
     magaza_col_detay = None
+
+# Yasal bildirim tablosu için mağaza sütununu ve akıllı isimleri oluşturuyoruz
+if not df_yasal.empty:
+    masraf_col_yasal = (
+            bul_kolon(df_yasal.columns, ["masraf", "kod"]) or
+            bul_kolon(df_yasal.columns, ["masraf"]) or
+            bul_kolon(df_yasal.columns, ["kod"])
+    )
+    magaza_name_col_yasal = (
+            bul_kolon(df_yasal.columns, ["masraf", "yeri"]) or
+            bul_kolon(df_yasal.columns, ["masrafyeri"]) or
+            bul_kolon(df_yasal.columns, ["mağaza", "ad"]) or
+            bul_kolon(df_yasal.columns, ["magaza", "ad"]) or
+            bul_kolon(df_yasal.columns, ["mağaza", "isim"]) or
+            bul_kolon(df_yasal.columns, ["magaza", "isim"]) or
+            bul_kolon(df_yasal.columns, ["mağaza"], haric_tutulacaklar=["kod"]) or
+            bul_kolon(df_yasal.columns, ["magaza"], haric_tutulacaklar=["kod"])
+    )
+
+    # Filtreleme yapabilmek için ana masraf kodu kolonunu tespit ediyoruz
+    magaza_col_yasal = masraf_col_yasal or magaza_name_col_yasal or df_yasal.columns[0]
+
+    df_yasal = df_yasal.dropna(subset=[magaza_col_yasal])
+    df_yasal = df_yasal[df_yasal[magaza_col_yasal].astype(str).str.strip() != "Toplam"]
+    df_yasal = df_yasal[df_yasal[magaza_col_yasal].astype(str).str.strip() != ""]
+
+    # AKILLI BİRLEŞTİRME: "Masraf Kodu — Masraf Yeri (Mağaza Adı)" formatı oluşturuluyor
+    df_yasal["Masraf_Kodu_Temiz"] = df_yasal[magaza_col_yasal].astype(str).str.strip()
+
+    # Ana veritabanımızdan masraf koduna göre gerçek mağaza isimlerini eşleştiren sözlük
+    masraf_to_magaza = dict(zip(df["Masraf_Kodu"].astype(str).str.strip(), df["Magaza"].astype(str).str.strip()))
+
+    if masraf_col_yasal and magaza_name_col_yasal and masraf_col_yasal != magaza_name_col_yasal:
+        # Eğer Excel'de zaten hem masraf kodu hem masraf yeri varsa birleştir
+        df_yasal["Display_Magaza"] = df_yasal[masraf_col_yasal].astype(str).str.strip() + " — " + df_yasal[
+            magaza_name_col_yasal].astype(str).str.strip()
+    else:
+        # Sadece kod varsa ismi ana df'den çekip birleştir
+        df_yasal["Mapped_Magaza"] = df_yasal["Masraf_Kodu_Temiz"].map(masraf_to_magaza).fillna("Bilinmeyen Mağaza")
+        df_yasal["Display_Magaza"] = df_yasal["Masraf_Kodu_Temiz"] + " — " + df_yasal["Mapped_Magaza"]
+else:
+    magaza_col_yasal = None
 
 # ── STİL DOSYALARI ─────────────────────────────
 st.markdown("""
@@ -209,59 +328,6 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-
-@st.cache_data
-def veri_yukle():
-    df = pd.read_excel(hedef_excel, sheet_name="TO-Yeni Format MTD-YTD", header=2)
-    df.columns = [
-        "Masraf_Kodu", "Yeni_Masraf_Kodu", "Magaza", "BM", "PM", "HRBP", "Segment", "Il",
-        "Oca26_Cikis", "Oca26_Ort", "Oca26_TO",
-        "Sub26_Cikis", "Sub26_Ort", "Sub26_TO",
-        "Mar26_Cikis", "Mar26_Ort", "Mar26_TO",
-        "Nis26_Cikis", "Nis26_Ort", "Nis26_TO",
-        "Mayis26_Cikis", "Mayis26_Ort", "Mayis26_TO",
-        "YTD26_Cikis", "YTD26_Ort", "YTD26_TO",
-        "Oca25_Cikis", "Oca25_Ort", "Oca25_TO",
-        "Sub25_Cikis", "Sub25_Ort", "Sub25_TO",
-        "Mar25_Cikis", "Mar25_Ort", "Mar25_TO",
-        "Nis25_Cikis", "Nis25_Ort", "Nis25_TO",
-        "Mayis25_Cikis", "Mayis25_Ort", "Mayis25_TO",
-        "YTD25_Cikis", "YTD25_Ort", "YTD25_TO"
-    ]
-    df = df.dropna(subset=["Masraf_Kodu"])
-    df = df[df["Masraf_Kodu"].astype(str).str.strip() != "Toplam"]
-    df = df.reset_index(drop=True)
-    to_cols = ["Oca26_TO", "Sub26_TO", "Mar26_TO", "Nis26_TO", "Mayis26_TO", "YTD26_TO",
-               "Oca25_TO", "Sub25_TO", "Mar25_TO", "Nis25_TO", "Mayis25_TO", "YTD25_TO"]
-    for col in to_cols:
-        df[col] = pd.to_numeric(df[col], errors="coerce") * 100
-    return df
-
-
-df = veri_yukle()
-
-ay_map = {
-    "Ocak": ("Oca26_Cikis", "Oca26_Ort", "Oca26_TO", "Oca25_TO"),
-    "Şubat": ("Sub26_Cikis", "Sub26_Ort", "Sub26_TO", "Sub25_TO"),
-    "Mart": ("Mar26_Cikis", "Mar26_Ort", "Mar26_TO", "Mar25_TO"),
-    "Nisan": ("Nis26_Cikis", "Nis26_Ort", "Nis26_TO", "Nis25_TO"),
-    "Mayıs": ("Mayis26_Cikis", "Mayis26_Ort", "Mayis26_TO", "Mayis25_TO"),
-}
-
-
-def genel_to(df_f, cikis_col, ort_col):
-    c = pd.to_numeric(df_f[cikis_col], errors="coerce").sum()
-    o = pd.to_numeric(df_f[ort_col], errors="coerce").sum()
-    return round((c / o) * 100, 1) if o > 0 else 0.0
-
-
-def risk_etiketi(to):
-    if pd.isna(to): return "—", "⚪"
-    if to > 20: return "Yüksek", "🔴"
-    if to > 10: return "Normal", "🟡"
-    return "Düşük", "🟢"
-
-
 # ── SOL PANEL (FİLTRELER) ──────────────────────
 with st.sidebar:
     try:
@@ -298,8 +364,9 @@ with st.sidebar:
         df_temp_pm = df.copy()
 
     bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
+    bm_idx = bm_listesi.index(st.session_state.bm_key) if st.session_state.bm_key in bm_listesi else 0
     st.markdown("👤 **Bölge Müdürlüğü (BM)**")
-    sec_bm = st.selectbox("BM", bm_listesi, index=pm_idx, key="bm_select", label_visibility="collapsed")
+    sec_bm = st.selectbox("BM", bm_listesi, index=bm_idx, key="bm_select", label_visibility="collapsed")
     st.session_state.bm_key = sec_bm
 
     if sec_bm != "Tümü":
@@ -308,13 +375,19 @@ with st.sidebar:
         df_temp_bm = df_temp_pm.copy()
 
     hrbp_listesi = ["Tümü"] + sorted(df_temp_bm["HRBP"].dropna().unique().tolist())
+    hrbp_idx = hrbp_listesi.index(st.session_state.hrbp_key) if st.session_state.hrbp_key in hrbp_listesi else 0
     st.markdown("🤝 **İK İş Ortağı (HRBP)**")
-    sec_hrbp = st.selectbox("HRBP", hrbp_listesi, label_visibility="collapsed")
+    sec_hrbp = st.selectbox("HRBP", hrbp_listesi, index=hrbp_idx, key="hrbp_select", label_visibility="collapsed")
+    st.session_state.hrbp_key = sec_hrbp
 
     segment_sirasi = ["FS", "A++", "A+", "A", "B", "C", "D"]
     segment_listesi = ["Tümü"] + [s for s in segment_sirasi if s in df["Segment"].dropna().unique().tolist()]
+    segment_idx = segment_listesi.index(
+        st.session_state.segment_key) if st.session_state.segment_key in segment_listesi else 0
     st.markdown("🏷️ **Segment**")
-    sec_segment = st.selectbox("Segment", segment_listesi, label_visibility="collapsed")
+    sec_segment = st.selectbox("Segment", segment_listesi, index=segment_idx, key="segment_select",
+                               label_visibility="collapsed")
+    st.session_state.segment_key = sec_segment
 
 # ── FİLTRELEME ────────────────────────────────
 df_f = df.copy()
@@ -364,26 +437,13 @@ if sec_ay != "Tümü (Nisan & Mayıs)": filtre_adi.append(f"Ay: {sec_ay}")
 alt_yazi = " | ".join(
     filtre_adi) if filtre_adi else "Tüm Türkiye Mağazalarının Turnover Detay Verisi Aşağıda Görüntülenebilmektedir."
 
-# ── ANA BAŞLIK ────────────────────────────────
-col_logo, col_baslik = st.columns([1, 6])
-with col_logo:
-    try:
-        st.image("koton_logo.png", width=180)
-    except:
-        st.markdown("**KOTON**")
-with col_baslik:
-    st.markdown("<h1 style='color:white; margin-bottom:0;'>Mağazacılık Turnover Analiz Paneli</h1>",
-                unsafe_allow_html=True)
-    st.markdown(f"<p style='color:#aaaacc; margin-top:4px;'>{alt_yazi}</p>", unsafe_allow_html=True)
-
-st.divider()
-
 # ── SEKMELER ──────────────────────────────────
-# GÜNCELLEME: Mayıs Detay Analizi 2. sekme, Mağaza Detay Analiz Kartı ise 3. sekme yapıldı.
-sekme1, sekme2, sekme3 = st.tabs([
+# 2. sekme Mayıs Detay Analizi, 3. sekme Mağaza Detay Analiz Kartı yapıldı.
+sekme1, sekme2, sekme3, sekme4 = st.tabs([
     "📊 Genel Performans & Trendler",
     "📅 Mayıs Detay Analizi",
-    "🏪 Mağaza Detay Analiz Kartı"
+    "🏪 Mağaza Detay Analiz Kartı",
+    "⚖️ Yasal Bildirimler"
 ])
 
 # ── SEKME 1 ───────────────────────────────────
@@ -477,7 +537,6 @@ with sekme1:
     st.dataframe(goster, use_container_width=True, hide_index=True)
 
 # ── SEKME 2 ───────────────────────────────────
-# GÜNCELLEME: Bu sekme artık "Mayıs Detay Analizi" sayfasını gösteriyor.
 with sekme2:
     st.markdown("### 📅 Mayıs Detay Veri Analizi")
     st.markdown(
@@ -497,7 +556,7 @@ with sekme2:
                 # Seçilen mağazanın satırını çekiyoruz
                 s_detay = df_detay[df_detay[magaza_col_detay].astype(str) == sec_magaza_detay].iloc[0]
 
-                # 2. Üst Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
+                # 2. Üst Merged Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
                 ft_tum_col = None
                 ft_gonullu_col = None
                 pt_tum_col = None
@@ -731,22 +790,45 @@ with sekme2:
                 else:
                     styled_df_tablo1 = df_tablo1.style.applymap(style_func, subset=["Sayı / Değer"])
 
-                # Turnover Sütunlarının Seçimi
-                to_tum_col = (
-                        bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
-                        bul_kolon(df_detay.columns, ["tüm", "to"]) or
-                        bul_kolon(df_detay.columns, ["toplam", "turnover"]) or
-                        bul_kolon(df_detay.columns, ["toplam", "to"]) or
-                        bul_kolon(df_detay.columns, ["turnover"],
-                                  haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"]) or
-                        bul_kolon(df_detay.columns, ["to"], haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"])
-                )
-                to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                   ["gönüllü", "to"])
-                to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                     ["gönülsüz", "to"])
-                to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                   ["zorunlu", "to"])
+                # Turnover sütunları ve oran formatlayıcı (Turnover / TO sütun uyumluluğu eklendi)
+                if sec_unvan == "Tümü (Toplam)":
+                    to_tum_col = (
+                            bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
+                            bul_kolon(df_detay.columns, ["tüm", "to"]) or
+                            bul_kolon(df_detay.columns, ["toplam", "turnover"]) or
+                            bul_kolon(df_detay.columns, ["toplam", "to"]) or
+                            bul_kolon(df_detay.columns, ["turnover"],
+                                      haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"]) or
+                            bul_kolon(df_detay.columns, ["to"], haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"])
+                    )
+                    to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                       ["gönüllü",
+                                                                                                        "to"])
+                    to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(
+                        df_detay.columns, ["gönülsüz", "to"])
+                    to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                       ["zorunlu",
+                                                                                                        "to"])
+                else:
+                    to_tum_col = (
+                            bul_kolon(df_detay.columns, ["turnover"] + keys,
+                                      exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
+                            bul_kolon(df_detay.columns, ["to"] + keys, exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
+                            bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
+                            bul_kolon(df_detay.columns, ["tüm", "to"])
+                    )
+                    to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü"] + keys,
+                                               exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["gönüllü",
+                                                                                                           "turnover"]) or bul_kolon(
+                        df_detay.columns, ["gönüllü", "to"])
+                    to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz"] + keys,
+                                                exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["gönülsüz",
+                                                                                                            "turnover"]) or bul_kolon(
+                        df_detay.columns, ["gönülsüz", "to"])
+                    to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu"] + keys,
+                                               exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["zorunlu",
+                                                                                                           "turnover"]) or bul_kolon(
+                        df_detay.columns, ["zorunlu", "to"])
 
                 to_tum_val = oran_formatla(s_detay[to_tum_col]) if to_tum_col else "—"
                 to_gonullu_val = oran_formatla(s_detay[to_gonullu_col]) if to_gonullu_col else "—"
@@ -802,14 +884,14 @@ with sekme2:
                     )
             except Exception as e:
                 # Arka planda bir hata oluşursa, çökme yerine hatayı anında tarayıcı ekranına basıyoruz.
-                st.error(f"❌ Üçüncü sekmede bir veri okuma veya görselleştirme hatası oluştu: {str(e)}")
+                st.error(f"❌ İkinci sekmede bir veri okuma veya görselleştirme hatası oluştu: {str(e)}")
                 st.info(
                     "Lütfen Excel tablonuzdaki başlıkların ve seçilen mağazanın verilerinin tam olduğunu kontrol edin.")
                 with st.expander("🛠️ Teknik Hata Detayı (Traceback)"):
                     st.text(traceback.format_exc())
 
 # ── SEKME 3 ───────────────────────────────────
-# GÜNCELLEME: Bu sekme artık "Mağaza Detay Analiz Kartı" sayfasını gösteriyor.
+# Mağaza Detay Analiz Kartı Sayfası
 with sekme3:
     st.markdown("### Detaylı Mağaza Karnesi")
     st.markdown("Aşağıdaki filtrelerden seçim yapabilirsiniz.")
@@ -970,3 +1052,120 @@ with sekme3:
                     delta=f"%{delta:.1f} (Seg. Ort: {seg_str})",
                     delta_color="inverse"
                 )
+
+# ── SEKME 4 ───────────────────────────────────
+# Yasal Bildirimler Sayfası
+with sekme4:
+    st.markdown("### ⚖️ Yasal Bildirim Takip Analizi")
+    st.markdown(
+        "Mağaza seçimi yaparak geç bildirilen yasal çıkışları (çıkış tarihi, bildirim tarihi ve fark gün) takip edebilirsiniz.")
+
+    if df_yasal.empty:
+        st.warning(
+            "⚠️ Excel dosyasında 'Yasal Bildirim' sayfası bulunamadığı için bu sekmedeki analizler yüklenemedi. Lütfen Excel dosyasını kontrol edin.")
+    else:
+        # GÜNCELLEME: Yasal bildirim sekmesindeki mağaza listesini "Masraf Kodu — Masraf Yeri" şeklinde çekecek şekilde güncelledik.
+        st.markdown("🔍 **Mağaza Seçimi (Yasal Bildirim)**")
+        magaza_listesi_yasal = sorted(df_yasal["Display_Magaza"].astype(str).unique().tolist())
+        sec_magaza_yasal = st.selectbox("Mağaza (Yasal)", magaza_listesi_yasal, label_visibility="collapsed")
+
+        if sec_magaza_yasal:
+            try:
+                # Seçilen mağazanın verilerini filtreliyoruz
+                df_filtered_yasal = df_yasal[df_yasal["Display_Magaza"].astype(str) == sec_magaza_yasal].copy()
+                df_filtered_yasal = df_filtered_yasal.reset_index(drop=True)
+
+                # Excel'deki sütunları akıllıca buluyoruz
+                cikis_tarih_col = bul_kolon(df_yasal.columns, ["çıkış", "tarih"]) or bul_kolon(df_yasal.columns,
+                                                                                               ["cikis",
+                                                                                                "tarih"]) or bul_kolon(
+                    df_yasal.columns, ["çıkış"]) or bul_kolon(df_yasal.columns, ["cikis"])
+                bildirim_tarih_col = bul_kolon(df_yasal.columns, ["bildirim", "tarih"]) or bul_kolon(df_yasal.columns,
+                                                                                                     ["bildirim"]) or bul_kolon(
+                    df_yasal.columns, ["bildi"])
+                fark_gun_col = bul_kolon(df_yasal.columns, ["fark", "gün"]) or bul_kolon(df_yasal.columns,
+                                                                                         ["fark", "gun"]) or bul_kolon(
+                    df_yasal.columns, ["fark"]) or bul_kolon(df_yasal.columns, ["gün"]) or bul_kolon(df_yasal.columns,
+                                                                                                     ["gun"])
+
+                # GÜNCELLEME: İsimleri ve kişileri en geniş varyasyonlarla arıyoruz (seçim yapınca ismin çıkması için)
+                ad_soyad_col = (
+                        bul_kolon(df_yasal.columns, ["ad", "soyad"]) or
+                        bul_kolon(df_yasal.columns, ["adı", "soyadı"]) or
+                        bul_kolon(df_yasal.columns, ["adi", "soyadi"]) or
+                        bul_kolon(df_yasal.columns, ["adsoyad"]) or
+                        bul_kolon(df_yasal.columns, ["isim"]) or
+                        bul_kolon(df_yasal.columns, ["ad", "adı", "adi"]) or
+                        bul_kolon(df_yasal.columns, ["çalışan"]) or
+                        bul_kolon(df_yasal.columns, ["calisan"]) or
+                        bul_kolon(df_yasal.columns, ["kişi"]) or
+                        bul_kolon(df_yasal.columns, ["kisi"])
+                )
+                sicil_col = bul_kolon(df_yasal.columns, ["sicil"]) or bul_kolon(df_yasal.columns, ["no"])
+
+                # Gösterilecek ve isimlendirilecek sütunların hazırlanması (Çakışmaları önlemek için list(dict.fromkeys(...)) yapıyoruz)
+                yasal_cols_to_show_raw = []
+                rename_dict = {}
+
+                if sicil_col:
+                    yasal_cols_to_show_raw.append(sicil_col)
+                    rename_dict[sicil_col] = "Sicil No"
+                if ad_soyad_col:
+                    yasal_cols_to_show_raw.append(ad_soyad_col)
+                    rename_dict[ad_soyad_col] = "Ad Soyad"
+                if cikis_tarih_col:
+                    yasal_cols_to_show_raw.append(cikis_tarih_col)
+                    rename_dict[cikis_tarih_col] = "Çıkış Tarihi"
+                if bildirim_tarih_col:
+                    yasal_cols_to_show_raw.append(bildirim_tarih_col)
+                    rename_dict[bildirim_tarih_col] = "Bildirim Tarihi"
+                if fark_gun_col:
+                    yasal_cols_to_show_raw.append(fark_gun_col)
+                    rename_dict[fark_gun_col] = "Fark Gün"
+
+                # Sütun listesinin benzersiz olmasını garantiliyoruz (Pandas Styler hatasını önler)
+                yasal_cols_to_show = list(dict.fromkeys(yasal_cols_to_show_raw))
+
+                # Eğer hiçbir ana sütun bulunamadıysa tüm filtreli veri gösterilir
+                if not yasal_cols_to_show:
+                    yasal_cols_to_show = df_yasal.columns.tolist()
+
+                # Tarih sütunlarını düzgün formatlamak için kontrol
+                for col in [cikis_tarih_col, bildirim_tarih_col]:
+                    if col and col in df_filtered_yasal.columns:
+                        try:
+                            df_filtered_yasal[col] = pd.to_datetime(df_filtered_yasal[col]).dt.strftime('%d.%m.%Y')
+                        except Exception:
+                            pass
+
+                # Değerleri ve fark günü tam sayı yapmak için kontrol
+                if fark_gun_col and fark_gun_col in df_filtered_yasal.columns:
+                    df_filtered_yasal[fark_gun_col] = pd.to_numeric(df_filtered_yasal[fark_gun_col],
+                                                                    errors="coerce").fillna(0).astype(int)
+
+                # Fark Gün sütununu kalın ve lacivert yapmak için Pandas Styler
+                style_func_yasal = lambda x: "color: #0d1b3e; font-weight: bold; font-size: 15px;"
+
+                # ── GEÇ BİLDİRİLEN ÇIKIŞ KONTROLÜ ────────
+                if df_filtered_yasal.empty:
+                    st.success("🎉 Seçilen mağaza için geç bildirilen yasal çıkış bulunmamaktadır.")
+                else:
+                    st.warning(
+                        f"⚠️ Bu mağaza için toplam **{len(df_filtered_yasal)}** adet geç bildirilen yasal çıkış tespit edilmiştir.")
+
+                    df_yasal_goster = df_filtered_yasal[yasal_cols_to_show].rename(columns=rename_dict)
+
+                    if "Fark Gün" in df_yasal_goster.columns:
+                        if hasattr(df_yasal_goster.style, "map"):
+                            styled_df_yasal = df_yasal_goster.style.map(style_func_yasal, subset=["Fark Gün"])
+                        else:
+                            styled_df_yasal = df_yasal_goster.style.applymap(style_func_yasal, subset=["Fark Gün"])
+                    else:
+                        styled_df_yasal = df_yasal_goster
+
+                    st.dataframe(styled_df_yasal, use_container_width=True, hide_index=True)
+
+            except Exception as e:
+                st.error(f"❌ Yasal bildirimler sayfasında bir veri okuma veya görselleştirme hatası oluştu: {str(e)}")
+                with st.expander("🛠️ Teknik Hata Detayı (Traceback)"):
+                    st.text(traceback.format_exc())
