@@ -354,7 +354,7 @@ with st.sidebar:
 
     pm_listesi = ["Tümü"] + sorted(df["PM"].dropna().unique().tolist())
     pm_idx = pm_listesi.index(st.session_state.pm_key) if st.session_state.pm_key in pm_listesi else 0
-    st.markdown("🏪 **Perakende Müdürlüğü (PM)**")
+    st.markdown("🏪 **Perakende Müdürü (PM)**")
     sec_pm = st.selectbox("PM", pm_listesi, index=pm_idx, key="pm_select", label_visibility="collapsed")
     st.session_state.pm_key = sec_pm
 
@@ -365,7 +365,7 @@ with st.sidebar:
 
     bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
     bm_idx = bm_listesi.index(st.session_state.bm_key) if st.session_state.bm_key in bm_listesi else 0
-    st.markdown("👤 **Bölge Müdürlüğü (BM)**")
+    st.markdown("👤 **Bölge Müdürü (BM)**")
     sec_bm = st.selectbox("BM", bm_listesi, index=bm_idx, key="bm_select", label_visibility="collapsed")
     st.session_state.bm_key = sec_bm
 
