@@ -11,7 +11,47 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ── 1. GLOBAL UNVAN TANIMLARI (EN BAŞA ALINDI - NAME ERROR ÖNLEYİCİ) ────────
+# ── STİL DOSYALARI (GECİKME VE RENK KAYBINI ÖNLEMEK İÇİN EN BAŞA ALINDI) ────────
+st.markdown("""
+<style>
+    .stApp { background-color: #0d1b3e; }
+    section[data-testid="stSidebar"] { background-color: #f0f2f6; }
+    section[data-testid="stSidebar"] * { color: #1a1a2e !important; }
+    div[data-testid="metric-container"] { background-color: #1a2f5e; border-radius: 8px; padding: 12px; }
+    h1, h2, h3, h4, p { color: white !important; }
+    .stTabs [data-baseweb="tab"] { color: white; }
+    .stTabs [data-baseweb="tab-list"] { background-color: #0d1b3e; }
+    .magaza-kart {
+        background-color: #1a2f5e;
+        border-left: 4px solid #e05c5c;
+        border-radius: 8px;
+        padding: 20px;
+        margin: 10px 0;
+    }
+    .segment-kart {
+        background-color: #1a2f5e;
+        border-left: 4px solid #4a6fa5;
+        border-radius: 8px;
+        padding: 16px;
+        margin: 10px 0;
+    }
+    /* 2x2 Grid için Lacivert Kutuların Stilleri */
+    .turnover-kutu {
+        background-color: #1a2f5e;
+        border-radius: 8px;
+        padding: 22px;
+        margin-bottom: 15px;
+        text-align: center;
+        border-bottom: 4px solid #85B7EB;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
+    }
+    .turnover-kutu.gonullu { border-bottom: 4px solid #4a6fa5; }
+    .turnover-kutu.gonulsuz { border-bottom: 4px solid #e05c5c; }
+    .turnover-kutu.zorunlu { border-bottom: 4px solid #ffd166; }
+</style>
+""", unsafe_allow_html=True)
+
+# ── GLOBAL UNVAN TANIMLARI ────────
 unvan_secenekleri = {
     "Tümü (Toplam)": ([], []),
     "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "mmy"]),
@@ -246,7 +286,7 @@ if not df_detay.empty:
 else:
     magaza_col_detay = None
 
-# Yasal bildirim tablosu için mağaza sütununu ve akıllı isimleri oluşturuyoruz
+# Yasal bildirim tablosu için mağaza sütununu ve akıllı isimleri oluşturuyoruz (Masraf Yeri Desteği Eklendi)
 if not df_yasal.empty:
     masraf_col_yasal = (
             bul_kolon(df_yasal.columns, ["masraf", "kod"]) or
@@ -288,47 +328,7 @@ if not df_yasal.empty:
 else:
     magaza_col_yasal = None
 
-# ── STİL DOSYALARI ─────────────────────────────
-st.markdown("""
-<style>
-    .stApp { background-color: #0d1b3e; }
-    section[data-testid="stSidebar"] { background-color: #f0f2f6; }
-    section[data-testid="stSidebar"] * { color: #1a1a2e !important; }
-    div[data-testid="metric-container"] { background-color: #1a2f5e; border-radius: 8px; padding: 12px; }
-    h1, h2, h3, h4, p { color: white !important; }
-    .stTabs [data-baseweb="tab"] { color: white; }
-    .stTabs [data-baseweb="tab-list"] { background-color: #0d1b3e; }
-    .magaza-kart {
-        background-color: #1a2f5e;
-        border-left: 4px solid #e05c5c;
-        border-radius: 8px;
-        padding: 20px;
-        margin: 10px 0;
-    }
-    .segment-kart {
-        background-color: #1a2f5e;
-        border-left: 4px solid #4a6fa5;
-        border-radius: 8px;
-        padding: 16px;
-        margin: 10px 0;
-    }
-    /* 2x2 Grid için Lacivert Kutuların Stilleri */
-    .turnover-kutu {
-        background-color: #1a2f5e;
-        border-radius: 8px;
-        padding: 22px;
-        margin-bottom: 15px;
-        text-align: center;
-        border-bottom: 4px solid #85B7EB;
-        box-shadow: 0 4px 6px rgba(0,0,0,0.15);
-    }
-    .turnover-kutu.gonullu { border-bottom: 4px solid #4a6fa5; }
-    .turnover-kutu.gonulsuz { border-bottom: 4px solid #e05c5c; }
-    .turnover-kutu.zorunlu { border-bottom: 4px solid #ffd166; }
-</style>
-""", unsafe_allow_html=True)
-
-# ── SOL PANEL (FİLTRELER) ──────────────────────
+# ── SOLAR PANEL (FİLTRELER) ──────────────────────
 with st.sidebar:
     try:
         st.image("koton_siyah.png", width=180)
@@ -438,7 +438,6 @@ alt_yazi = " | ".join(
     filtre_adi) if filtre_adi else "Tüm Türkiye Mağazalarının Turnover Detay Verisi Aşağıda Görüntülenebilmektedir."
 
 # ── SEKMELER ──────────────────────────────────
-# 2. sekme Mayıs Detay Analizi, 3. sekme Mağaza Detay Analiz Kartı yapıldı.
 sekme1, sekme2, sekme3, sekme4 = st.tabs([
     "📊 Genel Performans & Trendler",
     "📅 Mayıs Detay Analizi",
@@ -489,6 +488,67 @@ with sekme1:
             st.metric(f"📅 {ana_baslik25}", f"%{kpi25:.1f}")
         with k5:
             st.metric("📊 2025 YTD Toplam TO", f"%{kpi_ytd25:.1f}")
+
+    # En Yüksek Turnover'a Sahip 5 Mağaza Grafiği & Detay Tablosu (Risk Haritası)
+    st.divider()
+    st.markdown("### 🚨 En Yüksek YTD Turnover'a Sahip Mağazalar & Risk Haritası")
+
+    df_top5 = df_f.nlargest(5, "YTD26_TO")
+    if not df_top5.empty:
+        # Yatay bar grafiği için en düşükten en yükseğe doğru sıralıyoruz (Grafikte yukarı doğru artacak)
+        df_top5_sorted = df_top5.sort_values(by="YTD26_TO", ascending=True)
+
+        # Risk seviyesine göre bar renklerini atıyoruz
+        colors_top5 = []
+        for to in df_top5_sorted["YTD26_TO"]:
+            if to > 30:
+                colors_top5.append("#e05c5c")  # Yüksek - Kırmızı 🔴
+            elif to > 20:
+                colors_top5.append("#ffd166")  # Normal - Sarı 🟡
+            else:
+                colors_top5.append("#85B7EB")  # Düşük - Mavi 🔵
+
+        fig_top5 = go.Figure()
+        fig_top5.add_trace(go.Bar(
+            y=df_top5_sorted["Magaza"],
+            x=df_top5_sorted["YTD26_TO"],
+            orientation='h',
+            marker_color=colors_top5,
+            text=[f"%{val:.1f}" for val in df_top5_sorted["YTD26_TO"]],
+            textposition='auto',
+            hoverinfo='x+y'
+        ))
+        fig_top5.update_layout(
+            paper_bgcolor="#1a2f5e",
+            plot_bgcolor="#1a2f5e",
+            font=dict(color="white"),
+            xaxis=dict(title="Turnover Oranı (%)", gridcolor="#2e3f7a"),
+            yaxis=dict(gridcolor="#2e3f7a"),
+            margin=dict(l=20, r=20, t=10, b=20),
+            height=280
+        )
+
+        # Yanyana iki kolon oluşturuyoruz
+        chart_col, table_col = st.columns([5, 4])
+        with chart_col:
+            st.markdown("#### 📊 Mağaza Turnover Risk Dağılımı")
+            st.plotly_chart(fig_top5, use_container_width=True)
+
+        with table_col:
+            st.markdown("#### 📋 Kritik Risk Grubu Detay Listesi")
+
+            top5_table = df_top5.copy()
+            top5_table["Risk Durumu"] = top5_table["YTD26_TO"].apply(
+                lambda x: "🔴 Yüksek (>%30)" if x > 30 else ("🟡 Normal (%20-30)" if x > 20 else "🟢 Düşük (<=%20)")
+            )
+            top5_table["Turnover (YTD)"] = top5_table["YTD26_TO"].apply(lambda x: f"%{x:.1f}")
+
+            top5_goster = top5_table[["Masraf_Kodu", "Magaza", "Segment", "Turnover (YTD)", "Risk Durumu"]].copy()
+            top5_goster.columns = ["Kritik Kod", "Mağaza Adı", "Segment", "YTD TO %", "Risk Durumu"]
+
+            st.dataframe(top5_goster, use_container_width=True, hide_index=True)
+    else:
+        st.info("Filtrelere uygun mağaza verisi bulunamadı.")
 
     st.divider()
     st.markdown("### İlgili Filtreye Ait Mağaza Listesi")
@@ -556,7 +616,7 @@ with sekme2:
                 # Seçilen mağazanın satırını çekiyoruz
                 s_detay = df_detay[df_detay[magaza_col_detay].astype(str) == sec_magaza_detay].iloc[0]
 
-                # 2. Üst Merged Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
+                # 2. Üst Sütunların (Full Time ve Part-Time) Altındaki Sütunları Bulma
                 ft_tum_col = None
                 ft_gonullu_col = None
                 pt_tum_col = None
@@ -790,45 +850,22 @@ with sekme2:
                 else:
                     styled_df_tablo1 = df_tablo1.style.applymap(style_func, subset=["Sayı / Değer"])
 
-                # Turnover sütunları ve oran formatlayıcı (Turnover / TO sütun uyumluluğu eklendi)
-                if sec_unvan == "Tümü (Toplam)":
-                    to_tum_col = (
-                            bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
-                            bul_kolon(df_detay.columns, ["tüm", "to"]) or
-                            bul_kolon(df_detay.columns, ["toplam", "turnover"]) or
-                            bul_kolon(df_detay.columns, ["toplam", "to"]) or
-                            bul_kolon(df_detay.columns, ["turnover"],
-                                      haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"]) or
-                            bul_kolon(df_detay.columns, ["to"], haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"])
-                    )
-                    to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                       ["gönüllü",
-                                                                                                        "to"])
-                    to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(
-                        df_detay.columns, ["gönülsüz", "to"])
-                    to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
-                                                                                                       ["zorunlu",
-                                                                                                        "to"])
-                else:
-                    to_tum_col = (
-                            bul_kolon(df_detay.columns, ["turnover"] + keys,
-                                      exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
-                            bul_kolon(df_detay.columns, ["to"] + keys, exclude + ["gönüllü", "gönülsüz", "zorunlu"]) or
-                            bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
-                            bul_kolon(df_detay.columns, ["tüm", "to"])
-                    )
-                    to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü"] + keys,
-                                               exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["gönüllü",
-                                                                                                           "turnover"]) or bul_kolon(
-                        df_detay.columns, ["gönüllü", "to"])
-                    to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz"] + keys,
-                                                exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["gönülsüz",
-                                                                                                            "turnover"]) or bul_kolon(
-                        df_detay.columns, ["gönülsüz", "to"])
-                    to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu"] + keys,
-                                               exclude + ["sayı", "adet"]) or bul_kolon(df_detay.columns, ["zorunlu",
-                                                                                                           "turnover"]) or bul_kolon(
-                        df_detay.columns, ["zorunlu", "to"])
+                # Turnover Sütunlarının Seçimi
+                to_tum_col = (
+                        bul_kolon(df_detay.columns, ["tüm", "turnover"]) or
+                        bul_kolon(df_detay.columns, ["tüm", "to"]) or
+                        bul_kolon(df_detay.columns, ["toplam", "turnover"]) or
+                        bul_kolon(df_detay.columns, ["toplam", "to"]) or
+                        bul_kolon(df_detay.columns, ["turnover"],
+                                  haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"]) or
+                        bul_kolon(df_detay.columns, ["to"], haric_tutulacaklar=["gönüllü", "gönülsüz", "zorunlu"])
+                )
+                to_gonullu_col = bul_kolon(df_detay.columns, ["gönüllü", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                   ["gönüllü", "to"])
+                to_gonulsuz_col = bul_kolon(df_detay.columns, ["gönülsüz", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                     ["gönülsüz", "to"])
+                to_zorunlu_col = bul_kolon(df_detay.columns, ["zorunlu", "turnover"]) or bul_kolon(df_detay.columns,
+                                                                                                   ["zorunlu", "to"])
 
                 to_tum_val = oran_formatla(s_detay[to_tum_col]) if to_tum_col else "—"
                 to_gonullu_val = oran_formatla(s_detay[to_gonullu_col]) if to_gonullu_col else "—"
