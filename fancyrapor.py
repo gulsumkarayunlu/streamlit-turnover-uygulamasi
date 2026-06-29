@@ -55,10 +55,10 @@ st.markdown("""
 unvan_secenekleri = {
     "Tümü (Toplam)": ([], []),
     "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "mmy"]),
-    "Mağaza Müdür Yardımcısı": (["yardım", "yrd", "mmy"], []),
-    "VM": (["vm", "görsel", "visual"], []),
-    "Sorumlu Ekip": (["sorumlu"], []),
-    "Satış Ekibi": (["satış", "satiş", "danışman"], [])
+    "Mağaza Müdür Yardımcısı": (["yardım", "yrd", "mmy"]),
+    "VM": (["vm", "görsel", "visual"]),
+    "Sorumlu Ekip": (["sorumlu"]),
+    "Satış Ekibi": (["satış", "satiş", "danışman"])
 }
 
 # ── FILTRE SIFIRLAMA ICIN SESSION STATE TANIMLARI ────────
@@ -245,6 +245,7 @@ try:
                 break
 
     if hedef_yasal_sayfa:
+        # Akıllı satır başlığı (header) bulucuyla yasal bildirimleri okuyoruz
         df_yasal = None
         for h in [0, 1, 2, 3]:
             df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa, header=h)
@@ -354,7 +355,7 @@ with st.sidebar:
 
     pm_listesi = ["Tümü"] + sorted(df["PM"].dropna().unique().tolist())
     pm_idx = pm_listesi.index(st.session_state.pm_key) if st.session_state.pm_key in pm_listesi else 0
-    st.markdown("🏪 **Perakende Müdürü (PM)**")
+    st.markdown("🏪 **Perakende Müdürlüğü (PM)**")
     sec_pm = st.selectbox("PM", pm_listesi, index=pm_idx, key="pm_select", label_visibility="collapsed")
     st.session_state.pm_key = sec_pm
 
@@ -365,7 +366,7 @@ with st.sidebar:
 
     bm_listesi = ["Tümü"] + sorted(df_temp_pm["BM"].dropna().unique().tolist())
     bm_idx = bm_listesi.index(st.session_state.bm_key) if st.session_state.bm_key in bm_listesi else 0
-    st.markdown("👤 **Bölge Müdürü (BM)**")
+    st.markdown("👤 **Bölge Müdürlüğü (BM)**")
     sec_bm = st.selectbox("BM", bm_listesi, index=bm_idx, key="bm_select", label_visibility="collapsed")
     st.session_state.bm_key = sec_bm
 
@@ -438,6 +439,7 @@ alt_yazi = " | ".join(
     filtre_adi) if filtre_adi else "Tüm Türkiye Mağazalarının Turnover Detay Verisi Aşağıda Görüntülenebilmektedir."
 
 # ── SEKMELER ──────────────────────────────────
+# 2. sekme Mayıs Detay Analizi, 3. sekme Mağaza Detay Analiz Kartı yapıldı.
 sekme1, sekme2, sekme3, sekme4 = st.tabs([
     "📊 Genel Performans & Trendler",
     "📅 Mayıs Detay Analizi",
@@ -549,6 +551,60 @@ with sekme1:
             st.dataframe(top5_goster, use_container_width=True, hide_index=True)
     else:
         st.info("Filtrelere uygun mağaza verisi bulunamadı.")
+
+    # YENİ: Segment Kırılımına Göre Turnover Oranları Grafiği & Tablosu (Soldaki Filtrelere Tam Bağlı)
+    st.divider()
+    st.markdown("### 🏷️ Segment Kırılımına Göre Turnover Oranları")
+
+    # Segment bazlı turnover hesaplama
+    segment_to_list = []
+    unique_segments = sorted(df_f["Segment"].dropna().unique().tolist())
+    segment_sirasi_map = ["FS", "A++", "A+", "A", "B", "C", "D"]
+    unique_segments = [s for s in segment_sirasi_map if s in unique_segments]
+
+    for seg in unique_segments:
+        df_seg_temp = df_f[df_f["Segment"] == seg]
+        # Seçilen aya göre dinamik çıkış ve ortalama sütunlarını topluyoruz
+        seg_cikis = pd.to_numeric(df_seg_temp[cikis26], errors="coerce").sum()
+        seg_ort = pd.to_numeric(df_seg_temp[ort26], errors="coerce").sum()
+        seg_to = round((seg_cikis / seg_ort) * 100, 1) if seg_ort > 0 else 0.0
+        segment_to_list.append((seg, seg_to))
+
+    df_segment_to = pd.DataFrame(segment_to_list, columns=["Segment", "Turnover Oranı"])
+
+    if not df_segment_to.empty:
+        # Segment turnover bar grafiği
+        fig_seg_to = go.Figure()
+        fig_seg_to.add_trace(go.Bar(
+            x=df_segment_to["Segment"],
+            y=df_segment_to["Turnover Oranı"],
+            marker_color="#4a6fa5",  # Sitenin kurumsal çelik mavisi
+            text=[f"%{val:.1f}" for val in df_segment_to["Turnover Oranı"]],
+            textposition='auto',
+        ))
+        fig_seg_to.update_layout(
+            paper_bgcolor="#1a2f5e",
+            plot_bgcolor="#1a2f5e",
+            font=dict(color="white"),
+            xaxis=dict(title="Segment"),
+            yaxis=dict(title="Turnover Oranı (%)", gridcolor="#2e3f7a"),
+            margin=dict(l=20, r=20, t=10, b=20),
+            height=280
+        )
+
+        # Yanyana görsel düzen
+        seg_chart_col, seg_table_col = st.columns([5, 4])
+        with seg_chart_col:
+            st.markdown(f"#### 📊 Segment Turnover Dağılımı ({sec_ay if sec_ay != 'Tümü (Nisan & Mayıs)' else 'Nisan'})")
+            st.plotly_chart(fig_seg_to, use_container_width=True)
+        with seg_table_col:
+            st.markdown("#### 📋 Segment Oran Tablosu")
+            df_seg_goster = df_segment_to.copy()
+            df_seg_goster["Turnover Oranı"] = df_seg_goster["Turnover Oranı"].apply(lambda x: f"%{x:.1f}")
+            df_seg_goster.columns = ["Segment Sınıfı", "Segment Turnover %"]
+            st.dataframe(df_seg_goster, use_container_width=True, hide_index=True)
+    else:
+        st.info("Seçili segmentler için veri bulunamadı.")
 
     st.divider()
     st.markdown("### İlgili Filtreye Ait Mağaza Listesi")
