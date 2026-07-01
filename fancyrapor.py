@@ -275,6 +275,9 @@ def risk_etiketi(to):
 
 
 def sayi_col_bul(columns, anahtar_kelimeler, haric_tutulacaklar=None):
+    """
+    Sayı (count) içeren sütunları bulur; oran/yüzde sütunlarını hariç tutar.
+    """
     oran_haric = ["oran", "turnover", "to", "%", "rate", "yüzde"]
     haric = list(haric_tutulacaklar or []) + oran_haric
     return bul_kolon(columns, anahtar_kelimeler, haric)
@@ -417,7 +420,6 @@ if not df_ayrilanlar.empty:
             bul_kolon(df_ayrilanlar.columns, ["ayrılma", "neden"]) or
             bul_kolon(df_ayrilanlar.columns, ["neden"])
     )
-    # Öncelikli olarak YASAL AYRILMA NEDENİ'ni eşleştiriyoruz
     ayr_cikis_neden_col = (
             bul_kolon(df_ayrilanlar.columns, ["yasal ayrılma", "neden"]) or
             bul_kolon(df_ayrilanlar.columns, ["yasal ayrilma"]) or
@@ -485,6 +487,11 @@ if not df_guncel.empty:
             bul_kolon(df_guncel.columns, ["çalışan yaş"]) or
             bul_kolon(df_guncel.columns, ["yaş"]) or
             bul_kolon(df_guncel.columns, ["yas"])
+    )
+    gunc_donem_col = (
+            bul_kolon(df_guncel.columns, ["dönem"]) or
+            bul_kolon(df_guncel.columns, ["donem"]) or
+            bul_kolon(df_guncel.columns, ["ay"])
     )
 
     gunc_join_col = gunc_masraf_col or gunc_magaza_col
@@ -1334,7 +1341,6 @@ with sekme5:
             c_gonulsuz = vals_neden.str.contains("gönülsüz|gonulsuz").sum()
             c_zorunlu = vals_neden.str.contains("zorunlu").sum()
 
-        # İstek: Toplam çıkış sayısını sayfa ortasında gösteriyoruz
         _, ortalanmis_kolon, _ = st.columns([1, 1, 1])
         with ortalanmis_kolon:
             st.metric("🚪 Toplam Çıkış", f"{len(df_ayr_f)} Kişi")
@@ -1370,7 +1376,6 @@ with sekme5:
 
         st.markdown(f"**Toplam {len(df_ayr_f)} kayıt görüntüleniyor.**")
 
-        # İstek: TO Nedeni sütunu sola kaydırıldı ve Çıkış Nedeni başlığı Yasal Ayrılma Nedeni olarak haritalandı
         goster_cols = []
         goster_rename = {}
         if ayr_isim_col and ayr_isim_col in df_ayr_f.columns:
@@ -1426,6 +1431,16 @@ with sekme6:
         st.warning("⚠️ 'Güncel Çalışanlar' sayfası Excel dosyasında bulunamadı. Lütfen sayfa adını kontrol edin.")
     else:
         df_gunc_f = df_guncel.copy()
+
+        if 'gunc_donem_col' in globals() and gunc_donem_col and gunc_donem_col in df_gunc_f.columns:
+            def temizle(val):
+                return str(val).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç",
+                                                                                                              "c").replace(
+                    "ö", "o").replace("ü", "u")
+
+
+            df_gunc_f = df_gunc_f[df_gunc_f[gunc_donem_col].apply(temizle) == temizle(sec_ay)]
+
         if "BM" in df_gunc_f.columns and sec_bm != "Tümü":
             df_gunc_f = df_gunc_f[df_gunc_f["BM"] == sec_bm]
         if "PM" in df_gunc_f.columns and sec_pm != "Tümü":
@@ -1545,6 +1560,7 @@ with sekme6:
                         (gunc_altgrup_col_exact, "Alt Grup"),
                         (gunc_kidem_col, "Kıdem (Yıl)"),
                         (gunc_yas_col, "Yaş"),
+                        (gunc_donem_col, "Dönem")
                     ]:
                         if col and col in df_store_guncel.columns:
                             goster_guncel_cols.append(col)
@@ -1563,7 +1579,6 @@ with sekme6:
                         df_guncel_goster = df_guncel_goster.loc[:, ~df_guncel_goster.columns.duplicated()].copy()
                         st.dataframe(df_guncel_goster, use_container_width=True, hide_index=True)
 
-                        # İstek: Güncel Çalışanlar listesini Excel olarak indirme butonu
                         st.download_button(
                             label="📥 Kadro Listesini Excel Olarak İndir",
                             data=df_to_excel_bytes(df_guncel_goster, "Güncel Çalışanlar"),
