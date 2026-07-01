@@ -10,51 +10,189 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# ── SESSION STATE ────────
-for key, default in [
-    ('ay_key', "Mayıs"),  # Varsayılan başlangıç ayı sadece "Mayıs" yapıldı
-    ('pm_key', "Tümü"),
-    ('bm_key', "Tümü"),
-    ('hrbp_key', "Tümü"),
-    ('segment_key', "Tümü"),
-]:
-    if key not in st.session_state:
-        st.session_state[key] = default
+# ── 1. GLOBAL UNVAN TANIMLARI (HATA ÖNLEYİCİ) ────────
+unvan_secenekleri = {
+    "Tümü (Toplam)": ([], []),
+    "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "vm", "mmy"]),
+    "Müdür Yardımcısı": (["yardım", "yrd", "mmy"], []),
+    "Satış Danışmanı": (["satış", "danışman"], ["müdür", "yardım", "vm", "sorumlu"]),
+}
 
-# ── AY HARİTASI ────────
+# ── GLOBAL AY SÜTUN EŞLEŞTİRMELERİ ────────
 ay_map = {
     "Ocak": ("Oca26_Cikis", "Oca26_Ort", "Oca26_TO", "Oca25_TO"),
     "Şubat": ("Sub26_Cikis", "Sub26_Ort", "Sub26_TO", "Sub25_TO"),
     "Mart": ("Mar26_Cikis", "Mar26_Ort", "Mar26_TO", "Mar25_TO"),
     "Nisan": ("Nis26_Cikis", "Nis26_Ort", "Nis26_TO", "Nis25_TO"),
-    "Mayıs": ("Mayis26_Cikis", "Mayis26_Ort", "Mayis26_TO", "Mayis25_TO"),
+    "Mayıs": ("Mayis26_Cikis", "Mayis26_Ort", "Mayis26_TO", "Mayis25_TO")
 }
 
-# ── UNVAN SEÇENEKLERİ ────────
-unvan_secenekleri = {
-    "Tümü (Toplam)": ([], []),
-    "Mağaza Müdürü": (["müdür"], ["yardım", "yrd", "vm", "mmy"]),
-    "Müdür Yardımcısı": (["yardım", "yrd", "mmy"]),
-    "Satış Danışmanı": (["satış", "danışman"], ["müdür", "yardım", "vm", "sorumlu"]),
-}
+# ── FILTRE SIFIRLAMA ICIN SESSION STATE TANIMLARI ────────
+if 'ay_key' not in st.session_state:
+    st.session_state.ay_key = "Mayıs"
+if 'pm_key' not in st.session_state:
+    st.session_state.pm_key = "Tümü"
+if 'bm_key' not in st.session_state:
+    st.session_state.bm_key = "Tümü"
+if 'hrbp_key' not in st.session_state:
+    st.session_state.hrbp_key = "Tümü"
+if 'segment_key' not in st.session_state:
+    st.session_state.segment_key = "Tümü"
 
-# ── EXCEL DOSYASI BULUCU ────────
+
+# ── AKILLI EXCEL VE RESİM DOSYASI BULUCU (FILE NOT FOUND ÖNLEYİCİ) ────────
+def bul_dosya_yolu(dosya_adi):
+    """
+    Dosyanın adını hem ana dizinde (.) hem de src/ klasöründe arayarak
+    nerede olursa olsun bulup doğru dosya yolunu döndürür.
+    """
+    if os.path.exists(dosya_adi):
+        return dosya_adi
+    src_yolu = os.path.join("src", dosya_adi)
+    if os.path.exists(src_yolu):
+        return src_yolu
+    return dosya_adi
+
+
+# Akıllı Excel dosya bulucu (Hem kök dizini hem de src/ klasörünü tarar)
 hedef_excel = None
+olasi_klasorler = [".", "src"]
 try:
-    for file in os.listdir("."):
-        file_clean = str(file).lower().replace("ı", "i").strip()
-        if "mayis" in file_clean and file.endswith(".xlsx") and not file.startswith("~$"):
-            hedef_excel = file
+    for klasor in olasi_klasorler:
+        if os.path.exists(klasor):
+            for file in os.listdir(klasor):
+                file_clean = str(file).lower().replace("ı", "i").strip()
+                if "mayis" in file_clean and file.endswith(".xlsx") and not file.startswith("~$"):
+                    hedef_excel = os.path.join(klasor, file)
+                    break
+        if hedef_excel:
             break
+
+    # Yedek Plan: Adında mayıs geçmeyen ilk .xlsx dosyasını seçelim
     if hedef_excel is None:
-        for file in os.listdir("."):
-            if file.endswith(".xlsx") and not file.startswith("~$"):
-                hedef_excel = file
+        for klasor in olasi_klasorler:
+            if os.path.exists(klasor):
+                for file in os.listdir(klasor):
+                    if file.endswith(".xlsx") and not file.startswith("~$"):
+                        hedef_excel = os.path.join(klasor, file)
+                        break
+            if hedef_excel:
                 break
+
     if hedef_excel is None:
         hedef_excel = "Mayis_TO.xlsx"
 except Exception:
     hedef_excel = "Mayis_TO.xlsx"
+
+# ── AKILLI EXCEL SAYFASI BULUCU (SHEET NOT FOUND ÖNLEYİCİ) ────────
+try:
+    xls = pd.ExcelFile(hedef_excel)
+    sayfa_isimleri = xls.sheet_names
+    hedef_sayfa = None
+
+    # Sayfa ismini Türkçe karakterlere ve boşluklara karşı duyarsız olarak arıyoruz
+    for sheet in sayfa_isimleri:
+        sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+        if "mayis" in sheet_clean and "detay" in sheet_clean:
+            hedef_sayfa = sheet
+            break
+
+    if hedef_sayfa is None:
+        for sheet in sayfa_isimleri:
+            sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+            if "detay" in sheet_clean or "mayis" in sheet_clean:
+                hedef_sayfa = sheet
+                break
+
+    if hedef_sayfa is None:
+        hedef_sayfa = sayfa_isimleri[0]
+
+    df_detay = pd.read_excel(hedef_excel, sheet_name=hedef_sayfa, header=2)
+except Exception as e:
+    st.error(f"🚨 Excel dosyası okunamadı! Lütfen projenizde detay sayfasının bulunduğundan emin olun. Hata: {str(e)}")
+    df_detay = pd.DataFrame()
+
+# Yasal bildirimler sayfasını okuyoruz
+try:
+    hedef_yasal_sayfa = None
+    for sheet in sayfa_isimleri:
+        sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+        if "yasal" in sheet_clean and "bildirim" in sheet_clean:
+            hedef_yasal_sayfa = sheet
+            break
+
+    if hedef_yasal_sayfa is None:
+        for sheet in sayfa_isimleri:
+            sheet_clean = str(sheet).strip().lower().replace("ı", "i")
+            if "yasal" in sheet_clean or "bildirim" in sheet_clean:
+                hedef_yasal_sayfa = sheet
+                break
+
+    if hedef_yasal_sayfa:
+        # Akıllı satır başlığı (header) bulucuyla yasal bildirimleri okuyoruz
+        df_yasal = None
+        for h in [0, 1, 2, 3]:
+            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa, header=h)
+            df_temp = df_temp.dropna(how="all")
+            has_exit = any("çıkış" in str(col).lower() or "cikis" in str(col).lower() for col in df_temp.columns)
+            has_notice = any("bildirim" in str(col).lower() for col in df_temp.columns)
+            if has_exit or has_notice:
+                df_yasal = df_temp
+                break
+        if df_yasal is None:
+            df_yasal = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa)
+    else:
+        df_yasal = pd.DataFrame()
+except Exception:
+    df_yasal = pd.DataFrame()
+
+# ── GÜNCEL ÇALIŞANLAR SAYFASI ────────
+try:
+    hedef_guncel_sayfa = None
+    for sheet in sayfa_isimleri:
+        sc = str(sheet).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç", "c")
+        if "guncel" in sc or "güncel" in str(sheet).strip().lower() or "calisan" in sc:
+            hedef_guncel_sayfa = sheet
+            break
+
+    if hedef_guncel_sayfa:
+        df_guncel = None
+        for h in [0, 1, 2, 3]:
+            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_guncel_sayfa, header=h)
+            df_temp = df_temp.dropna(how="all")
+            if len(df_temp.columns) >= 3 and len(df_temp) > 0:
+                df_guncel = df_temp
+                break
+        if df_guncel is None:
+            df_guncel = pd.read_excel(hedef_excel, sheet_name=hedef_guncel_sayfa)
+    else:
+        df_guncel = pd.DataFrame()
+except Exception:
+    df_guncel = pd.DataFrame()
+
+# ── İŞTEN AYRILANLAR SAYFASI ────────
+try:
+    hedef_ayrilanlar_sayfa = None
+    for sheet in sayfa_isimleri:
+        sc = str(sheet).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç", "c")
+        if "ayrilan" in sc or "ayrılan" in str(sheet).strip().lower() or "cikis" in sc:
+            hedef_ayrilanlar_sayfa = sheet
+            break
+
+    if hedef_ayrilanlar_sayfa:
+        df_ayrilanlar = None
+        for h in [0, 1, 2, 3]:
+            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_ayrilanlar_sayfa, header=h)
+            df_temp = df_temp.dropna(how="all")
+            if len(df_temp.columns) >= 3 and len(df_temp) > 0:
+                df_ayrilanlar = df_temp
+                break
+        if df_ayrilanlar is None:
+            df_ayrilanlar = pd.read_excel(hedef_excel, sheet_name=hedef_ayrilanlar_sayfa)
+    else:
+        df_ayrilanlar = pd.DataFrame()
+except Exception:
+    df_ayrilanlar = pd.DataFrame()
 
 
 # ── YARDIMCI FONKSİYONLAR ────────
@@ -128,10 +266,20 @@ def sayi_col_bul(columns, anahtar_kelimeler, haric_tutulacaklar=None):
     return bul_kolon(columns, anahtar_kelimeler, haric)
 
 
+# ── GENEL EXCEL EXPORT YARDIMCISI (ÖNBELLİKLİ) ────────
+@st.cache_data
+def df_to_excel_bytes(df, sheet_name="Sayfa1"):
+    import io
+    buf = io.BytesIO()
+    with pd.ExcelWriter(buf, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name=sheet_name)
+    return buf.getvalue()
+
+
 # ── VERİ YÜKLEME ────────
 @st.cache_data
-def veri_yukle():
-    df = pd.read_excel(hedef_excel, sheet_name="TO-Yeni Format MTD-YTD", header=2)
+def veri_yukle(excel_yolu):
+    df = pd.read_excel(excel_yolu, sheet_name="TO-Yeni Format MTD-YTD", header=2)
 
     # Sütunlardaki boşlukları temizleyelim
     df.columns = [str(c).strip() for c in df.columns]
@@ -142,6 +290,7 @@ def veri_yukle():
             prev_hrbp_idx = idx
             break
 
+    # Standart 44 sütun yapımız
     standard_cols = [
         "Masraf_Kodu", "Yeni_Masraf_Kodu", "Magaza", "BM", "PM", "HRBP", "Segment", "Il",
         "Oca26_Cikis", "Oca26_Ort", "Oca26_TO",
@@ -158,9 +307,11 @@ def veri_yukle():
         "YTD25_Cikis", "YTD25_Ort", "YTD25_TO"
     ]
 
+    # Eğer "Önceki Dönem HRBP" Excel'e eklenmişse, sütunlarımızın tam arasına dinamik olarak ekliyoruz
     if prev_hrbp_idx is not None:
         standard_cols.insert(prev_hrbp_idx, "Onceki_Donem_HRBP")
 
+    # Sütun uzunluğu uyuşmazlığı hatasını önlemek için sütun uzunluğu koruması
     if len(df.columns) == len(standard_cols):
         df.columns = standard_cols
     else:
@@ -184,112 +335,8 @@ def veri_yukle():
     return df
 
 
-df = veri_yukle()
-
-# ── EXCEL SAYFALARI ────────
-try:
-    xls = pd.ExcelFile(hedef_excel)
-    sayfa_isimleri = xls.sheet_names
-
-    hedef_sayfa = None
-    for sheet in sayfa_isimleri:
-        sc = str(sheet).strip().lower().replace("ı", "i")
-        if "mayis" in sc and "detay" in sc:
-            hedef_sayfa = sheet
-            break
-    if hedef_sayfa is None:
-        for sheet in sayfa_isimleri:
-            sc = str(sheet).strip().lower().replace("ı", "i")
-            if "detay" in sc or "mayis" in sc:
-                hedef_sayfa = sheet
-                break
-    if hedef_sayfa is None:
-        hedef_sayfa = sayfa_isimleri[0]
-
-    df_detay = pd.read_excel(hedef_excel, sheet_name=hedef_sayfa, header=2)
-except Exception as e:
-    st.error(f"🚨 Excel dosyası okunamadı: {str(e)}")
-    df_detay = pd.DataFrame()
-
-# Yasal bildirimler sayfası
-try:
-    hedef_yasal_sayfa = None
-    for sheet in sayfa_isimleri:
-        sc = str(sheet).strip().lower().replace("ı", "i")
-        if "yasal" in sc and "bildirim" in sc:
-            hedef_yasal_sayfa = sheet
-            break
-    if hedef_yasal_sayfa is None:
-        for sheet in sayfa_isimleri:
-            sc = str(sheet).strip().lower().replace("ı", "i")
-            if "yasal" in sc or "bildirim" in sc:
-                hedef_yasal_sayfa = sheet
-                break
-
-    if hedef_yasal_sayfa:
-        df_yasal = None
-        for h in [0, 1, 2, 3]:
-            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa, header=h)
-            df_temp = df_temp.dropna(how="all")
-            has_exit = any("çıkış" in str(col).lower() or "cikis" in str(col).lower() for col in df_temp.columns)
-            has_notice = any("bildirim" in str(col).lower() for col in df_temp.columns)
-            if has_exit or has_notice:
-                df_yasal = df_temp
-                break
-        if df_yasal is None:
-            df_yasal = pd.read_excel(hedef_excel, sheet_name=hedef_yasal_sayfa)
-    else:
-        df_yasal = pd.DataFrame()
-except Exception:
-    df_yasal = pd.DataFrame()
-
-# ── İŞTEN AYRILANLAR SAYFASI ────────
-try:
-    hedef_ayrilanlar_sayfa = None
-    for sheet in sayfa_isimleri:
-        sc = str(sheet).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g")
-        if "ayril" in sc or "ayrıl" in str(sheet).strip().lower():
-            hedef_ayrilanlar_sayfa = sheet
-            break
-
-    if hedef_ayrilanlar_sayfa:
-        df_ayrilanlar = None
-        for h in [0, 1, 2, 3]:
-            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_ayrilanlar_sayfa, header=h)
-            df_temp = df_temp.dropna(how="all")
-            if len(df_temp.columns) >= 3 and len(df_temp) > 0:
-                df_ayrilanlar = df_temp
-                break
-        if df_ayrilanlar is None:
-            df_ayrilanlar = pd.read_excel(hedef_excel, sheet_name=hedef_ayrilanlar_sayfa)
-    else:
-        df_ayrilanlar = pd.DataFrame()
-except Exception:
-    df_ayrilanlar = pd.DataFrame()
-
-# ── GÜNCEL ÇALIŞANLAR SAYFASI ────────
-try:
-    hedef_guncel_sayfa = None
-    for sheet in sayfa_isimleri:
-        sc = str(sheet).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç", "c")
-        if "guncel" in sc or "güncel" in str(sheet).strip().lower() or "calisan" in sc:
-            hedef_guncel_sayfa = sheet
-            break
-
-    if hedef_guncel_sayfa:
-        df_guncel = None
-        for h in [0, 1, 2, 3]:
-            df_temp = pd.read_excel(hedef_excel, sheet_name=hedef_guncel_sayfa, header=h)
-            df_temp = df_temp.dropna(how="all")
-            if len(df_temp.columns) >= 3 and len(df_temp) > 0:
-                df_guncel = df_temp
-                break
-        if df_guncel is None:
-            df_guncel = pd.read_excel(hedef_excel, sheet_name=hedef_guncel_sayfa)
-    else:
-        df_guncel = pd.DataFrame()
-except Exception:
-    df_guncel = pd.DataFrame()
+# 1. Ana veriyi dinamik yolla yüklüyoruz
+df = veri_yukle(hedef_excel)
 
 # ── DETAY TABLOSU SÜTUN EŞLEŞTİRMELERİ ────────
 if not df_detay.empty:
@@ -298,8 +345,10 @@ if not df_detay.empty:
             bul_kolon(df_detay.columns, ["magaza"]) or
             bul_kolon(df_detay.columns, ["masraf"])
     )
+
     if magaza_col_detay is None and len(df_detay.columns) > 0:
         magaza_col_detay = df_detay.columns[min(2, len(df_detay.columns) - 1)]
+
     if magaza_col_detay:
         df_detay = df_detay.dropna(subset=[magaza_col_detay])
         df_detay = df_detay[df_detay[magaza_col_detay].astype(str).str.strip() != "Toplam"]
@@ -307,7 +356,7 @@ if not df_detay.empty:
 else:
     magaza_col_detay = None
 
-# Yasal bildirim sütun eşleştirmeleri
+# Yasal bildirim tablosu için mağaza sütununu ve akıllı isimleri oluşturuyoruz (df yüklendikten sonra çalışır)
 if not df_yasal.empty:
     masraf_col_yasal = (
             bul_kolon(df_yasal.columns, ["masraf", "kod"]) or
@@ -316,23 +365,34 @@ if not df_yasal.empty:
     )
     magaza_name_col_yasal = (
             bul_kolon(df_yasal.columns, ["masraf", "yeri"]) or
+            bul_kolon(df_yasal.columns, ["masrafyeri"]) or
             bul_kolon(df_yasal.columns, ["mağaza", "ad"]) or
             bul_kolon(df_yasal.columns, ["magaza", "ad"]) or
+            bul_kolon(df_yasal.columns, ["mağaza", "isim"]) or
+            bul_kolon(df_yasal.columns, ["magaza", "isim"]) or
             bul_kolon(df_yasal.columns, ["mağaza"], haric_tutulacaklar=["kod"]) or
             bul_kolon(df_yasal.columns, ["magaza"], haric_tutulacaklar=["kod"])
     )
+
+    # Filtreleme yapabilmek için ana masraf kodu kolonunu tespit ediyoruz
     magaza_col_yasal = masraf_col_yasal or magaza_name_col_yasal or df_yasal.columns[0]
+
     df_yasal = df_yasal.dropna(subset=[magaza_col_yasal])
     df_yasal = df_yasal[df_yasal[magaza_col_yasal].astype(str).str.strip() != "Toplam"]
     df_yasal = df_yasal[df_yasal[magaza_col_yasal].astype(str).str.strip() != ""]
+
+    # AKILLI BİRLEŞTİRME: "Masraf Kodu — Masraf Yeri (Mağaza Adı)" formatı oluşturuluyor
     df_yasal["Masraf_Kodu_Temiz"] = df_yasal[magaza_col_yasal].astype(str).str.strip()
+
+    # Ana veritabanımızdan masraf koduna göre gerçek mağaza isimlerini eşleştiren sözlük
     masraf_to_magaza = dict(zip(df["Masraf_Kodu"].astype(str).str.strip(), df["Magaza"].astype(str).str.strip()))
+
     if masraf_col_yasal and magaza_name_col_yasal and masraf_col_yasal != magaza_name_col_yasal:
-        df_yasal["Display_Magaza"] = (
-                df_yasal[masraf_col_yasal].astype(str).str.strip() + " — " +
-                df_yasal[magaza_name_col_yasal].astype(str).str.strip()
-        )
+        # Eğer Excel'de zaten hem masraf kodu hem masraf yeri varsa birleştir
+        df_yasal["Display_Magaza"] = df_yasal[masraf_col_yasal].astype(str).str.strip() + " — " + df_yasal[
+            magaza_name_col_yasal].astype(str).str.strip()
     else:
+        # Sadece kod varsa ismi ana df'den çekip birleştir
         df_yasal["Mapped_Magaza"] = df_yasal["Masraf_Kodu_Temiz"].map(masraf_to_magaza).fillna("Bilinmeyen Mağaza")
         df_yasal["Display_Magaza"] = df_yasal["Masraf_Kodu_Temiz"] + " — " + df_yasal["Mapped_Magaza"]
 else:
@@ -365,7 +425,10 @@ if not df_ayrilanlar.empty:
             bul_kolon(df_ayrilanlar.columns, ["ayrılma", "neden"]) or
             bul_kolon(df_ayrilanlar.columns, ["neden"])
     )
+    # Öncelikli olarak "yasal ayrılma nedeni" kolonunu arayacak şekilde güncellendi
     ayr_cikis_neden_col = (
+            bul_kolon(df_ayrilanlar.columns, ["yasal ayrılma", "neden"]) or
+            bul_kolon(df_ayrilanlar.columns, ["yasal ayrilma"]) or
             bul_kolon(df_ayrilanlar.columns, ["çıkış", "neden"]) or
             bul_kolon(df_ayrilanlar.columns, ["işten", "neden"]) or
             bul_kolon(df_ayrilanlar.columns, ["sebep"])
@@ -495,7 +558,7 @@ st.markdown("""
 # ── SOL PANEL ────────
 with st.sidebar:
     try:
-        st.image("koton_siyah.png", width=180)
+        st.image(bul_dosya_yolu("koton_siyah.png") if 'bul_dosya_yolu' in globals() else "koton_siyah.png", width=180)
     except Exception:
         st.markdown("**KOTON**")
     st.markdown("**Karne Verisi - Turnover**")
@@ -1188,7 +1251,6 @@ with sekme4:
     if df_yasal.empty:
         st.warning("⚠️ Yasal Bildirim sayfası yüklenemedi.")
     else:
-        # Sidebar filtresine göre yasal tabloyu kısıtla
         df_yasal_f = df_yasal[df_yasal["Masraf_Kodu_Temiz"].isin(filtered_masraf_list)]
         if df_yasal_f.empty:
             df_yasal_f = df_yasal
@@ -1302,6 +1364,9 @@ with sekme5:
             c_gonulsuz = vals_neden.str.contains("gönülsüz|gonulsuz").sum()
             c_zorunlu = vals_neden.str.contains("zorunlu").sum()
 
+        # İstek: Toplam çıkış sayısı Gönüllü, Gönülsüz ve Zorunlu çıkışların üzerinde gösteriliyor
+        st.metric("🚪 Toplam Çıkış", f"{len(df_ayr_f)} Kişi")
+
         col_g1, col_g2, col_g3 = st.columns(3)
         with col_g1:
             st.metric("🟢 Toplam Gönüllü Çıkış", f"{c_gonullu} Kişi")
@@ -1318,6 +1383,7 @@ with sekme5:
             arama_ayr = st.text_input("Ara", placeholder="İsim veya mağaza adı...",
                                       key="arama_ayrilanlar", label_visibility="collapsed")
         with mag_col:
+            # Sütun adları çakışmasını engellemek için ana df'den ("Magaza" sütunu) süzüyoruz
             st.markdown("🏪 **Mağaza Filtresi**")
             mag_list_ayr = ["Tümü"] + sorted(df_ayr_f["Magaza"].dropna().astype(str).unique().tolist())
             sec_mag_ayr = st.selectbox("Mağaza", mag_list_ayr, key="mag_ayrilanlar", label_visibility="collapsed")
@@ -1333,6 +1399,7 @@ with sekme5:
 
         st.markdown(f"**Toplam {len(df_ayr_f)} kayıt görüntüleniyor.**")
 
+        # İstek: Sütun sırası TO Nedeni, Çıkış Nedeni'nden (Yasal Ayrılma Nedeni) önce gelecek şekilde ayarlandı
         goster_cols = []
         goster_rename = {}
         if ayr_isim_col and ayr_isim_col in df_ayr_f.columns:
@@ -1352,7 +1419,7 @@ with sekme5:
             goster_rename[ayr_to_neden_col] = "TO Nedeni"
         if ayr_cikis_neden_col and ayr_cikis_neden_col in df_ayr_f.columns:
             goster_cols.append(ayr_cikis_neden_col)
-            goster_rename[ayr_cikis_neden_col] = "Çıkış Nedeni"
+            goster_rename[ayr_cikis_neden_col] = "Yasal Ayrılma Nedeni"
 
         if not goster_cols:
             merge_ekstra = ["_join_key", "Masraf_Kodu", "BM", "PM", "HRBP", "Segment", "Il", "Magaza",
@@ -1372,19 +1439,9 @@ with sekme5:
 
         st.dataframe(df_ayr_goster, use_container_width=True, hide_index=True)
 
-
-        @st.cache_data
-        def df_to_excel_bytes(df):
-            import io
-            buf = io.BytesIO()
-            with pd.ExcelWriter(buf, engine="openpyxl") as writer:
-                df.to_excel(writer, index=False, sheet_name="İşten Ayrılanlar")
-            return buf.getvalue()
-
-
         st.download_button(
             label="📥 Listeyi Excel Olarak İndir",
-            data=df_to_excel_bytes(df_ayr_goster),
+            data=df_to_excel_bytes(df_ayr_goster, "İşten Ayrılanlar"),
             file_name="isten_ayrilanlar.xlsx",
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
@@ -1458,9 +1515,9 @@ with sekme6:
 
                 if gunc_altgrup_col_exact and gunc_altgrup_col_exact in df_store_guncel.columns:
                     vals_grup = df_store_guncel[gunc_altgrup_col_exact].astype(str).str.strip().str.lower()
-                    # Doğrudan "tam zamanlı" ve "yarı zamanlı" ifadelerine duyarlı sayım
-                    ft_count = vals_grup.str.contains("tam zamanlı|tam zamanli|tam").sum()
-                    pt_count = vals_grup.str.contains("yarı zamanlı|yari zamanli|yarı|yari").sum()
+                    # Doğrudan "tam zamanlı" ve "yarı zamanlı" değerlerini saydırıyoruz
+                    ft_count = vals_grup.str.contains("tam zamanlı|tam zamanli").sum()
+                    pt_count = vals_grup.str.contains("yarı zamanlı|yari zamanli").sum()
 
                 # Cinsiyet sayımı
                 kadin_count = 0
@@ -1551,5 +1608,19 @@ with sekme6:
                         # Olası mükerrer sütun adlarını kaldırarak DataFrame çizim hatasını engelliyoruz
                         df_guncel_goster = df_guncel_goster.loc[:, ~df_guncel_goster.columns.duplicated()].copy()
                         st.dataframe(df_guncel_goster, use_container_width=True, hide_index=True)
+
+                        # İstek: Güncel Çalışanlar listesini Excel olarak indirebilme butonu eklendi
+                        st.download_button(
+                            label="📥 Kadro Listesini Excel Olarak İndir",
+                            data=df_to_excel_bytes(df_guncel_goster, "Güncel Çalışanlar"),
+                            file_name=f"guncel_calisanlar_{kod_guncel}.xlsx",
+                            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                        )
                     else:
                         st.info("Kadro detay bilgisi bulunamadı.")
+
+                with st.expander("🛠️ Sütun Teşhis Detayı (Çalışan Alt Grubu)"):
+                    st.write({
+                        "Tespit Edilen Kadro Sütunu (Alt Grup)": gunc_altgrup_col_exact,
+                        "Mevcut Excel Sayfa Sütunları": list(df_guncel.columns)
+                    })
