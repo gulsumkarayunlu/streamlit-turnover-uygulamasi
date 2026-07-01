@@ -28,7 +28,42 @@ ay_map = {
 }
 
 
-# ── GLOBAL YARDIMCI FONKSİYONLAR ────────
+# ── GLOBAL YARDIMCI FONKSİYONLAR (EN ÜSTTE TANIMLI - HATA ÖNLEYİCİ) ────────
+def temiz_kod(val):
+    """
+    Mağaza / Masraf kodlarını (Örn: 1024.0 -> 1024) temizleyerek
+    tablolar arası eşleşmenin kusursuz çalışmasını sağlar.
+    """
+    if pd.isna(val):
+        return ""
+    val_str = str(val).strip()
+    if "." in val_str:
+        val_str = val_str.split(".")[0]
+    return val_str
+
+
+def bul_kolon(columns, anahtar_kelimeler, haric_tutulacaklar=None):
+    if haric_tutulacaklar is None:
+        haric_tutulacaklar = []
+    for col in columns:
+        col_str = str(col).strip().lower()
+        if all(kw.lower() in col_str for kw in anahtar_kelimeler):
+            if not any(h.lower() in col_str for h in haric_tutulacaklar):
+                return col
+    for col in columns:
+        col_str = str(col).strip().lower()
+        if any(kw.lower() in col_str for kw in anahtar_kelimeler):
+            if not any(h.lower() in col_str for h in haric_tutulacaklar):
+                return col
+    return None
+
+
+def sayi_col_bul(columns, anahtar_kelimeler, haric_tutulacaklar=None):
+    oran_haric = ["oran", "turnover", "to", "%", "rate", "yüzde"]
+    haric = list(haric_tutulacaklar or []) + oran_haric
+    return bul_kolon(columns, anahtar_kelimeler, haric)
+
+
 def format_delta(d, label=""):
     """
     Delta metninin eksi/artı işaretini en başa alarak
@@ -54,6 +89,50 @@ def df_to_excel_bytes(df, sheet_name="Sayfa1"):
     with pd.ExcelWriter(buf, engine="openpyxl") as writer:
         df.to_excel(writer, index=False, sheet_name=sheet_name)
     return buf.getvalue()
+
+
+def parse_percentage(val):
+    if pd.isna(val) or val == "—":
+        return None
+    if isinstance(val, (int, float)):
+        if 0 < val <= 1.0:
+            return val * 100
+        return val
+    if isinstance(val, str):
+        val_clean = val.replace("%", "").strip()
+        try:
+            v = float(val_clean)
+            if 0 < v <= 1.0 and "%" not in val:
+                return v * 100
+            return v
+        except ValueError:
+            return None
+    return None
+
+
+def oran_formatla(val):
+    if pd.isna(val) or val == "—":
+        return "—"
+    parsed = parse_percentage(val)
+    if parsed is None:
+        return "—"
+    return f"%{parsed:.1f}"
+
+
+def genel_to(df_f, cikis_col, ort_col):
+    c = pd.to_numeric(df_f[cikis_col], errors="coerce").sum()
+    o = pd.to_numeric(df_f[ort_col], errors="coerce").sum()
+    return round((c / o) * 100, 1) if o > 0 else 0.0
+
+
+def risk_etiketi(to):
+    if pd.isna(to):
+        return "—", "⚪"
+    if to > 20:
+        return "Yüksek", "🔴"
+    if to > 10:
+        return "Normal", "🟡"
+    return "Düşük", "🟢"
 
 
 # ── FİLTRE SIFIRLAMA İÇİN SESSİON STATE TANIMLARI ────────
@@ -213,76 +292,6 @@ except Exception:
     df_ayrilanlar = pd.DataFrame()
 
 
-# ── YARDIMCI SÜTUN BULUCULAR ────────
-def bul_kolon(columns, anahtar_kelimeler, haric_tutulacaklar=None):
-    if haric_tutulacaklar is None:
-        haric_tutulacaklar = []
-    for col in columns:
-        col_str = str(col).strip().lower()
-        if all(kw.lower() in col_str for kw in anahtar_kelimeler):
-            if not any(h.lower() in col_str for h in haric_tutulacaklar):
-                return col
-    for col in columns:
-        col_str = str(col).strip().lower()
-        if any(kw.lower() in col_str for kw in anahtar_kelimeler):
-            if not any(h.lower() in col_str for h in haric_tutulacaklar):
-                return col
-    return None
-
-
-def parse_percentage(val):
-    if pd.isna(val) or val == "—":
-        return None
-    if isinstance(val, (int, float)):
-        if 0 < val <= 1.0:
-            return val * 100
-        return val
-    if isinstance(val, str):
-        val_clean = val.replace("%", "").strip()
-        try:
-            v = float(val_clean)
-            if 0 < v <= 1.0 and "%" not in val:
-                return v * 100
-            return v
-        except ValueError:
-            return None
-    return None
-
-
-def oran_formatla(val):
-    if pd.isna(val) or val == "—":
-        return "—"
-    parsed = parse_percentage(val)
-    if parsed is None:
-        return "—"
-    return f"%{parsed:.1f}"
-
-
-def genel_to(df_f, cikis_col, ort_col):
-    c = pd.to_numeric(df_f[cikis_col], errors="coerce").sum()
-    o = pd.to_numeric(df_f[ort_col], errors="coerce").sum()
-    return round((c / o) * 100, 1) if o > 0 else 0.0
-
-
-def risk_etiketi(to):
-    if pd.isna(to):
-        return "—", "⚪"
-    if to > 20:
-        return "Yüksek", "🔴"
-    if to > 10:
-        return "Normal", "🟡"
-    return "Düşük", "🟢"
-
-
-def sayi_col_bul(columns, anahtar_kelimeler, haric_tutulacaklar=None):
-    """
-    Sayı (count) içeren sütunları bulur; oran/yüzde sütunlarını hariç tutar.
-    """
-    oran_haric = ["oran", "turnover", "to", "%", "rate", "yüzde"]
-    haric = list(haric_tutulacaklar or []) + oran_haric
-    return bul_kolon(columns, anahtar_kelimeler, haric)
-
-
 # ── ANA VERİ YÜKLEME ────────
 @st.cache_data
 def veri_yukle(excel_yolu):
@@ -325,6 +334,7 @@ def veri_yukle(excel_yolu):
         df.columns = standard_cols
 
     df = df.dropna(subset=["Masraf_Kodu"])
+    df["Masraf_Kodu"] = df["Masraf_Kodu"].apply(temiz_kod)
     df = df[df["Masraf_Kodu"].astype(str).str.strip() != "Toplam"]
     df = df.reset_index(drop=True)
     to_cols = [
@@ -381,7 +391,7 @@ if not df_yasal.empty:
     df_yasal = df_yasal[df_yasal[magaza_col_yasal].astype(str).str.strip() != "Toplam"]
     df_yasal = df_yasal[df_yasal[magaza_col_yasal].astype(str).str.strip() != ""]
 
-    df_yasal["Masraf_Kodu_Temiz"] = df_yasal[magaza_col_yasal].astype(str).str.strip()
+    df_yasal["Masraf_Kodu_Temiz"] = df_yasal[magaza_col_yasal].apply(temiz_kod)
     masraf_to_magaza = dict(zip(df["Masraf_Kodu"].astype(str).str.strip(), df["Magaza"].astype(str).str.strip()))
 
     if masraf_col_yasal and magaza_name_col_yasal and masraf_col_yasal != magaza_name_col_yasal:
@@ -444,7 +454,7 @@ if not df_ayrilanlar.empty:
 
         masraf_info = df[merge_cols].copy()
         masraf_info["Masraf_Kodu"] = masraf_info["Masraf_Kodu"].astype(str).str.strip()
-        df_ayrilanlar["_join_key"] = df_ayrilanlar[ayr_join_col].astype(str).str.strip()
+        df_ayrilanlar["_join_key"] = df_ayrilanlar[ayr_join_col].apply(temiz_kod)
         df_ayrilanlar = df_ayrilanlar.merge(masraf_info, left_on="_join_key", right_on="Masraf_Kodu", how="left")
 
 # ── GÜNCEL ÇALIŞANLAR HARİTALAMA ────────
@@ -458,6 +468,22 @@ if not df_guncel.empty:
             bul_kolon(df_guncel.columns, ["mağaza"]) or
             bul_kolon(df_guncel.columns, ["magaza"])
     )
+
+    # İsabetli Dönem Sütunu Eşleşmesi
+    gunc_donem_col = None
+    for col in df_guncel.columns:
+        c_clean = str(col).strip().lower()
+        if c_clean in ["dönem", "donem", "ay", "dönemi", "donemi", "ay adi", "ay_adi"]:
+            gunc_donem_col = col
+            break
+    if not gunc_donem_col:
+        gunc_donem_col = (
+                bul_kolon(df_guncel.columns, ["dönem"]) or
+                bul_kolon(df_guncel.columns, ["donem"]) or
+                bul_kolon(df_guncel.columns, ["ay_adi"]) or
+                bul_kolon(df_guncel.columns, ["ay adi"])
+        )
+
     gunc_altgrup_col = (
             bul_kolon(df_guncel.columns, ["çalışanaltgrubu"]) or
             bul_kolon(df_guncel.columns, ["calisanaltgrubu"]) or
@@ -483,16 +509,20 @@ if not df_guncel.empty:
             bul_kolon(df_guncel.columns, ["kıdem yıl"]) or
             bul_kolon(df_guncel.columns, ["kıdem"])
     )
-    gunc_yas_col = (
-            bul_kolon(df_guncel.columns, ["çalışan yaş"]) or
-            bul_kolon(df_guncel.columns, ["yaş"]) or
-            bul_kolon(df_guncel.columns, ["yas"])
-    )
-    gunc_donem_col = (
-            bul_kolon(df_guncel.columns, ["dönem"]) or
-            bul_kolon(df_guncel.columns, ["donem"]) or
-            bul_kolon(df_guncel.columns, ["ay"])
-    )
+
+    # İsabetli Yaş Sütunu Eşleşmesi
+    gunc_yas_col = None
+    for col in df_guncel.columns:
+        c_clean = str(col).strip().lower()
+        if c_clean in ["yaş", "yas", "yasi", "yaşı"]:
+            gunc_yas_col = col
+            break
+    if not gunc_yas_col:
+        gunc_yas_col = (
+                bul_kolon(df_guncel.columns, ["çalışan yaş"]) or
+                bul_kolon(df_guncel.columns, ["yaş"]) or
+                bul_kolon(df_guncel.columns, ["yas"])
+        )
 
     gunc_join_col = gunc_masraf_col or gunc_magaza_col
     if gunc_join_col:
@@ -506,7 +536,7 @@ if not df_guncel.empty:
 
         masraf_info = df[["Masraf_Kodu", "BM", "PM", "HRBP", "Segment", "Magaza", "Il"]].copy()
         masraf_info["Masraf_Kodu"] = masraf_info["Masraf_Kodu"].astype(str).str.strip()
-        df_guncel["_join_key"] = df_guncel[gunc_join_col].astype(str).str.strip()
+        df_guncel["_join_key"] = df_guncel[gunc_join_col].apply(temiz_kod)
         df_guncel = df_guncel.merge(masraf_info, left_on="_join_key", right_on="Masraf_Kodu", how="left")
 
 # ── STİL ────────
@@ -821,9 +851,9 @@ with sekme1:
         goster[c] = goster[c].apply(lambda x: f"%{x:.1f}" if not pd.isna(x) else "—")
     st.dataframe(goster, use_container_width=True, hide_index=True)
 
-# ══════════════════════════════════════════════
-# SEKME 2 — Mayıs Detay Analizi
-# ══════════════════════════════════════════════
+# ── SEKME 2 ───────────────────────────────────
+# (Sidebar filtresine göre mağaza listesi daralır)
+# ── Mayıs Detay Analizi ────────
 with sekme2:
     st.markdown("### 📅 Mayıs Detay Veri Analizi")
     st.markdown("Mağaza ve unvan seçimi yaparak dönem içi hareketlerini ve turnover oranlarını inceleyebilirsiniz.")
@@ -1301,8 +1331,7 @@ with sekme4:
                     with st.expander("🛠️ Teknik Hata Detayı"):
                         st.text(traceback.format_exc())
 
-# ══════════════════════════════════════════════
-# SEKME 5 — İşten Ayrılanlar
+# ── SEKME 5 — İşten Ayrılanlar
 # ══════════════════════════════════════════════
 with sekme5:
     st.markdown("### 🚪 İşten Ayrılanlar Listesi")
@@ -1421,8 +1450,7 @@ with sekme5:
             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
         )
 
-# ══════════════════════════════════════════════
-# SEKME 6 — Güncel Çalışanlar
+# ── SEKME 6 — Güncel Çalışanlar
 # ══════════════════════════════════════════════
 with sekme6:
     st.markdown("### 👥 Güncel Çalışanlar Analizi")
@@ -1430,16 +1458,8 @@ with sekme6:
     if df_guncel.empty:
         st.warning("⚠️ 'Güncel Çalışanlar' sayfası Excel dosyasında bulunamadı. Lütfen sayfa adını kontrol edin.")
     else:
+        # Sol panel filtrelerini (İl, BM, PM, HRBP, Segment) uyguluyoruz
         df_gunc_f = df_guncel.copy()
-
-        if 'gunc_donem_col' in globals() and gunc_donem_col and gunc_donem_col in df_gunc_f.columns:
-            def temizle(val):
-                return str(val).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç",
-                                                                                                              "c").replace(
-                    "ö", "o").replace("ü", "u")
-
-
-            df_gunc_f = df_gunc_f[df_gunc_f[gunc_donem_col].apply(temizle) == temizle(sec_ay)]
 
         if "BM" in df_gunc_f.columns and sec_bm != "Tümü":
             df_gunc_f = df_gunc_f[df_gunc_f["BM"] == sec_bm]
@@ -1450,33 +1470,69 @@ with sekme6:
         if "Segment" in df_gunc_f.columns and sec_segment != "Tümü":
             df_gunc_f = df_gunc_f[df_gunc_f["Segment"] == sec_segment]
 
+        # Süzme işlemini doğrudan sol paneldeki "sec_ay" (Month) filtresine bağlıyoruz
+        if 'gunc_donem_col' in globals() and gunc_donem_col and gunc_donem_col in df_gunc_f.columns:
+            def temizle(val):
+                return str(val).strip().lower().replace("ı", "i").replace("ş", "s").replace("ğ", "g").replace("ç",
+                                                                                                              "c").replace(
+                    "ö", "o").replace("ü", "u")
+
+
+            val_sec_ay = temizle(sec_ay)
+            # Alt dize ve esnek karakter eşleşmesiyle sol paneldeki aya göre süzme yapıyoruz
+            mask = df_gunc_f[gunc_donem_col].apply(lambda x: val_sec_ay in temizle(x) or temizle(x) in val_sec_ay)
+
+            if mask.any():
+                df_gunc_f = df_gunc_f[mask]
+            else:
+                st.info(
+                    f"💡 Seçilen '{sec_ay}' dönemine ait güncel çalışan verisi bulunamadı. Tabloda diğer tüm dönemlerin verisi gösteriliyor.")
+
+        # Mağaza Seçimi
         st.markdown("🏪 **İncelenecek Mağazayı Seçin**")
-        gunc_magaza_listesi = sorted(
+
+        # Sütun adları uyumluluğu için _join_key kullanımı ve "Tümü" seçeneği entegrasyonu
+        gunc_magaza_listesi = ["Tümü"] + sorted(
             (df_gunc_f["_join_key"].astype(str) + " — " + df_gunc_f["Magaza"].astype(str)).unique().tolist()
         )
-        if not gunc_magaza_listesi:
-            st.info("Filtrelere uygun aktif çalışan kaydı olan mağaza bulunamadı.")
+
+        if len(gunc_magaza_listesi) == 1 and df_gunc_f.empty:
+            st.warning(
+                "⚠️ Seçili kriterlere uygun aktif çalışan kaydı bulunamadı. Lütfen sol paneldeki veya dönem filtrelerinizi kontrol edin.")
         else:
             sec_magaza_guncel = st.selectbox("Mağaza (Güncel)", gunc_magaza_listesi, label_visibility="collapsed")
 
             if sec_magaza_guncel:
-                kod_guncel = sec_magaza_guncel.split(" — ")[0].strip()
-                df_store_guncel = df_gunc_f[df_gunc_f["_join_key"] == kod_guncel]
+                if sec_magaza_guncel == "Tümü":
+                    df_store_guncel = df_gunc_f.copy()
 
-                s_meta = df[df["Masraf_Kodu"] == kod_guncel].iloc[0]
+                    st.markdown(f"""
+                    <div class="magaza-kart" style="border-left: 4px solid #4a6fa5;">
+                        <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">GENEL KADRO ÖZETİ</p>
+                        <h2 style="color:white; margin:0;">Tüm Filtrelenmiş Mağazalar</h2><br>
+                        <span style="color:#e0e0e0; margin-right:24px;">📅 Seçilen Dönem: <b>{sec_ay}</b></span>
+                        <span style="color:#e0e0e0; margin-right:24px;">🏪 Toplam Aktif Mağaza Sayısı: <b>{df_store_guncel['_join_key'].nunique()}</b></span>
+                    </div>""", unsafe_allow_html=True)
+                else:
+                    kod_guncel = sec_magaza_guncel.split(" — ")[0].strip()
+                    df_store_guncel = df_gunc_f[df_gunc_f["_join_key"] == kod_guncel]
 
-                st.markdown(f"""
-                <div class="magaza-kart">
-                    <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">MAĞAZA GENEL BİLGİLERİ</p>
-                    <h2 style="color:white; margin:0;">{s_meta['Masraf_Kodu']} — {s_meta['Magaza']}</h2><br>
-                    <span style="color:#e0e0e0; margin-right:24px;">📍 İl: <b>{s_meta['Il']}</b></span>
-                    <span style="color:#e0e0e0; margin-right:24px;">➕ Segment: <b>{s_meta['Segment']}</b></span>
-                    <span style="color:#e0e0e0; margin-right:24px;">🔢 Yeni Masraf Kodu: <b>{s_meta['Yeni_Masraf_Kodu']}</b></span>
-                    <br><br>
-                    <span style="color:#e0e0e0; margin-right:24px;">👤 BM: <b>{s_meta['BM']}</b></span>
-                    <span style="color:#e0e0e0; margin-right:24px;">🏪 PM: <b>{s_meta['PM']}</b></span>
-                    <span style="color:#e0e0e0;">🤝 HRBP: <b>{s_meta['HRBP']}</b></span>
-                </div>""", unsafe_allow_html=True)
+                    # s_meta doğrudan ana tablodan çekiliyor
+                    s_meta = df[df["Masraf_Kodu"] == kod_guncel].iloc[0]
+
+                    # Mağaza Bilgileri Kartı
+                    st.markdown(f"""
+                    <div class="magaza-kart">
+                        <p style="color:#aaaacc; font-size:12px; margin-bottom:8px;">MAĞAZA GENEL BİLGİLERİ</p>
+                        <h2 style="color:white; margin:0;">{s_meta['Masraf_Kodu']} — {s_meta['Magaza']}</h2><br>
+                        <span style="color:#e0e0e0; margin-right:24px;">📍 İl: <b>{s_meta['Il']}</b></span>
+                        <span style="color:#e0e0e0; margin-right:24px;">➕ Segment: <b>{s_meta['Segment']}</b></span>
+                        <span style="color:#e0e0e0; margin-right:24px;">🔢 Yeni Masraf Kodu: <b>{s_meta['Yeni_Masraf_Kodu']}</b></span>
+                        <br><br>
+                        <span style="color:#e0e0e0; margin-right:24px;">👤 BM: <b>{s_meta['BM']}</b></span>
+                        <span style="color:#e0e0e0; margin-right:24px;">🏪 PM: <b>{s_meta['PM']}</b></span>
+                        <span style="color:#e0e0e0;">🤝 HRBP: <b>{s_meta['HRBP']}</b></span>
+                    </div>""", unsafe_allow_html=True)
 
                 toplam_calisan = len(df_store_guncel)
 
@@ -1494,11 +1550,13 @@ with sekme6:
                     pt_count = vals_grup.str.contains("yarı zamanlı|yari zamanli").sum()
 
                 kadin_count = 0
-                erkek_count = 0
+                # Cinsiyet sayımı için doğrudan 'K' ve 'E' harfi algılaması yerine esnek harf algılaması yapıyoruz
                 if gunc_cinsiyet_col and gunc_cinsiyet_col in df_store_guncel.columns:
                     vals_cins = df_store_guncel[gunc_cinsiyet_col].astype(str).str.strip().str.lower()
-                    kadin_count = vals_cins.str.startswith("k").sum()
-                    erkek_count = vals_cins.str.startswith("e").sum()
+                    kadin_count = vals_cins.apply(lambda x: x.startswith("k") or "kadın" in x or "kadin" in x).sum()
+                    erkek_count = vals_cins.apply(lambda x: x.startswith("e") or "erkek" in x).sum()
+                else:
+                    erkek_count = 0
 
                 kidem_ort = 0.0
                 if gunc_kidem_col and gunc_kidem_col in df_store_guncel.columns:
@@ -1553,15 +1611,25 @@ with sekme6:
                                        bul_kolon(df_guncel.columns, ["isim"]) or
                                        bul_kolon(df_guncel.columns, ["çalışan"]))
 
-                    for col, label in [
+                    include_store_col = (sec_magaza_guncel == "Tümü")
+                    columns_to_show = [
                         (sicil_col_guncel, "Sicil No"),
                         (isim_col_guncel, "Ad Soyad"),
+                    ]
+                    if include_store_col:
+                        columns_to_show.extend([
+                            ("Masraf_Kodu", "Masraf Kodu"),
+                            ("Magaza", "Mağaza")
+                        ])
+                    # Sütun listesinden "Dönem" sütunu tamamen çıkarıldı
+                    columns_to_show.extend([
                         (gunc_unvan_col, "Pozisyon"),
                         (gunc_altgrup_col_exact, "Alt Grup"),
                         (gunc_kidem_col, "Kıdem (Yıl)"),
-                        (gunc_yas_col, "Yaş"),
-                        (gunc_donem_col, "Dönem")
-                    ]:
+                        (gunc_yas_col, "Yaş")
+                    ])
+
+                    for col, label in columns_to_show:
                         if col and col in df_store_guncel.columns:
                             goster_guncel_cols.append(col)
                             rename_guncel[col] = label
@@ -1579,14 +1647,15 @@ with sekme6:
                         df_guncel_goster = df_guncel_goster.loc[:, ~df_guncel_goster.columns.duplicated()].copy()
                         st.dataframe(df_guncel_goster, use_container_width=True, hide_index=True)
 
+                        file_label_guncel = "Tüm_Magazalar" if sec_magaza_guncel == "Tümü" else kod_guncel
                         st.download_button(
                             label="📥 Kadro Listesini Excel Olarak İndir",
                             data=df_to_excel_bytes(df_guncel_goster, "Güncel Çalışanlar"),
-                            file_name=f"guncel_calisanlar_{kod_guncel}.xlsx",
+                            file_name=f"guncel_calisanlar_{file_label_guncel}.xlsx",
                             mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
                         )
                     else:
-                        st.info("Kadro detay bilgisi bulunamadı.")
+                        st.info("Kadro detay bilgini bulunamadı.")
 
                 with st.expander("🛠️ Sütun Teşhis Detayı (Çalışan Alt Grubu)"):
                     st.write({
